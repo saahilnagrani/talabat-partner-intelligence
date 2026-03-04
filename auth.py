@@ -16,18 +16,44 @@ to add or remove users. Example secrets.toml entry:
     password     = "another_password"
     display_name = "Carol"
 
-Login is ephemeral (session-state only), so users re-enter credentials on
-page refresh — that's intentional and normal for a lightweight demo.
-Email history persists independently via Supabase (storage.py).
+Login is persisted via a browser cookie (streamlit-cookies-controller) so
+users remain logged in across page refreshes. Email and onboarding plan
+history persist independently via Supabase (storage.py).
 """
 from __future__ import annotations
 
 import streamlit as st
+from streamlit_cookies_controller import CookieController
+
+_COOKIE_KEY = "tpi_user"
+
+
+@st.cache_resource
+def _cookie_controller() -> CookieController:
+    """Singleton CookieController (one per server process)."""
+    return CookieController()
 
 
 def get_current_user() -> str | None:
-    """Return the logged-in username, or None if not authenticated."""
-    return st.session_state.get("logged_in_user")
+    """Return the logged-in username, or None if not authenticated.
+
+    Checks session state first (fast path), then falls back to the
+    persisted cookie so users stay logged in after a page refresh.
+    """
+    # Fast path — already in this session
+    if "logged_in_user" in st.session_state:
+        return st.session_state["logged_in_user"]
+
+    # Cookie path — restore from a previous session / page refresh
+    try:
+        saved = _cookie_controller().get(_COOKIE_KEY)
+        if saved:
+            st.session_state["logged_in_user"] = saved
+            return saved
+    except Exception:
+        pass  # Cookie library not ready yet — will be set on next rerun
+
+    return None
 
 
 def show_login_form() -> None:
@@ -46,8 +72,14 @@ def show_login_form() -> None:
         expected = users_cfg.get(username, {}).get("password", "")
         if expected and password == expected:
             st.session_state.logged_in_user = username
+            # Persist across page refreshes
+            try:
+                _cookie_controller().set(_COOKIE_KEY, username)
+            except Exception:
+                pass
             # Clear any stale cache from a previous user
             st.session_state.pop("email_history_cache", None)
+            st.session_state.pop("onboarding_plan_cache", None)
             st.rerun()
         else:
             st.error("Incorrect password. Please try again.")
@@ -62,7 +94,12 @@ def get_display_name(username: str) -> str:
 
 
 def logout() -> None:
-    """Clear auth state and cached history, then rerun."""
+    """Clear auth state, cookie, and all caches, then rerun."""
+    try:
+        _cookie_controller().remove(_COOKIE_KEY)
+    except Exception:
+        pass
     st.session_state.pop("logged_in_user", None)
     st.session_state.pop("email_history_cache", None)
+    st.session_state.pop("onboarding_plan_cache", None)
     st.rerun()

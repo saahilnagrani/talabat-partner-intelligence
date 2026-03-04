@@ -261,34 +261,38 @@ def render_onboarding_timeline(plan: dict):
         st.info("No milestones found in plan.")
         return
 
+    # Sort by day so milestones always appear in chronological order
+    milestones = sorted(milestones, key=lambda m: m.get("day", 0))
+
     owner_colors = {
-        "talabat": "#FF6000",
-        "restaurant": "#0066cc",
-        "both": "#6f42c1",
+        "talabat":    ("#FF6000", "rgba(255,96,0,0.10)"),
+        "restaurant": ("#0066cc", "rgba(0,102,204,0.10)"),
+        "both":       ("#6f42c1", "rgba(111,66,193,0.10)"),
     }
 
     st.markdown('<div class="section-header">Onboarding Timeline</div>', unsafe_allow_html=True)
 
     for m in milestones:
         owner = m.get("owner", "both")
-        color = owner_colors.get(owner, "#999")
-        blocking_tag = " 🔴 BLOCKING" if m.get("blocking") else ""
+        color, bg = owner_colors.get(owner, ("#999", "rgba(153,153,153,0.08)"))
+        blocking_tag = " &nbsp;🔴 BLOCKING" if m.get("blocking") else ""
         is_golive = "GO LIVE" in m.get("title", "")
 
         if is_golive:
             st.markdown(
-                f'<div style="background:#FF6000;color:white;padding:10px 16px;border-radius:8px;'
-                f'font-weight:700;font-size:1em;margin:8px 0;">🚀 Day {m["day"]}: {m["title"]}</div>'
-                f'<p style="margin:4px 0 16px 8px;font-size:0.85em;color:#495057">{m.get("description","")}</p>',
+                f'<div style="background:#FF6000;color:white;padding:12px 16px;border-radius:8px;'
+                f'font-weight:700;font-size:1em;margin:10px 0 4px;">🚀 Day {m["day"]}: {m["title"]}</div>'
+                f'<p style="margin:2px 0 14px 4px;font-size:0.85em;color:#888;">{m.get("description","")}</p>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                f'<div class="timeline-item">'
-                f'<div class="timeline-dot" style="background:{color};"></div>'
-                f'<div class="timeline-day">Day {m["day"]} • {owner.upper()}{blocking_tag}</div>'
-                f'<div class="timeline-title">{m.get("title","")}</div>'
-                f'<div class="timeline-desc">{m.get("description","")}</div>'
+                f'<div style="border-left:4px solid {color};background:{bg};border-radius:6px;'
+                f'padding:10px 14px;margin-bottom:8px;">'
+                f'<div style="font-size:0.72em;color:{color};font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">'
+                f'Day {m["day"]} &nbsp;·&nbsp; {owner.upper()}{blocking_tag}</div>'
+                f'<div style="font-weight:600;font-size:0.95em;margin:3px 0 4px;">{m.get("title","")}</div>'
+                f'<div style="font-size:0.83em;color:#888;line-height:1.4;">{m.get("description","")}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )

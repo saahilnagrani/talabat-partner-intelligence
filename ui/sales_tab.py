@@ -4,6 +4,10 @@ Tab 1: Sales Acquisition Agent UI.
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field as dc_field
 from datetime import datetime, date, timedelta
 from itertools import groupby
 from data.seed import MARKET_BENCHMARKS, get_leads
@@ -27,29 +31,64 @@ ALL_CUISINES = [
 
 
 # ---------------------------------------------------------------------------
+# Module-level concurrent generation task store (shared across reruns)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class _GenTask:
+    task_id: str
+    label: str        # e.g. "⚡ Nando's" or "🚀 Batch (JLT, Indian, min 50)"
+    user_id: str
+    kind: str         # "quick" | "batch"
+    status: str = "running"          # "running" | "done" | "error"
+    events: list = dc_field(default_factory=list)
+    emails: list = dc_field(default_factory=list)
+    scores: list = dc_field(default_factory=list)
+    error: str | None = None
+
+
+_TASKS: dict[str, _GenTask] = {}
+_TASKS_LOCK = threading.Lock()
+
+
+def _generation_worker(task_id: str, generator) -> None:
+    """Background thread: run agent generator, accumulate events thread-safely."""
+    try:
+        for event in generator:
+            with _TASKS_LOCK:
+                _TASKS[task_id].events.append(event)
+                if event.type == "tool_result":
+                    res  = event.data.get("result", {})
+                    name = event.data.get("name", "")
+                    if name == "write_outreach_email" and isinstance(res, dict) and "body" in res:
+                        _TASKS[task_id].emails.append(res)
+                    if name == "score_lead" and isinstance(res, dict) and "score" in res:
+                        _TASKS[task_id].scores.append(res)
+        with _TASKS_LOCK:
+            _TASKS[task_id].status = "done"
+    except Exception as e:
+        with _TASKS_LOCK:
+            _TASKS[task_id].status = "error"
+            _TASKS[task_id].error = str(e)
+
+
+# ---------------------------------------------------------------------------
 # Supabase-backed history helpers
 # ---------------------------------------------------------------------------
 
 def _ensure_history_loaded(user_id: str) -> None:
-    """Load email history from Supabase on the first render of this session.
-
-    Subsequent reruns read from the in-memory cache so we don't hammer the DB.
-    """
     if "email_history_cache" not in st.session_state:
         st.session_state.email_history_cache = load_history(user_id)
 
 
 def _append_email(user_id: str, email: dict, source: str) -> None:
-    """Prepend to the local cache and persist to Supabase."""
     ts = datetime.now()
     entry = {"email": email, "timestamp": ts, "source": source}
-    # Prepend so newest-first order is maintained without re-sorting
     st.session_state.email_history_cache.insert(0, entry)
     save_email(user_id, email, source, ts)
 
 
 def _clear_history(user_id: str) -> None:
-    """Wipe the local cache and delete from Supabase."""
     st.session_state.email_history_cache = []
     clear_history(user_id)
 
@@ -60,7 +99,7 @@ def _clear_history(user_id: str) -> None:
 
 def _render_leads_table(scored_leads: list[dict]) -> str:
     """Render leads as a sortable HTML table with per-row score popup."""
-    NUMERIC = [3, 4, 5, 6, 8]  # column indices that sort numerically
+    NUMERIC = [3, 4, 5, 6, 8]
 
     rows = ""
     for item in scored_leads:
@@ -205,7 +244,6 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
         }});
         if (!wasOpen) {{
           tip.classList.add('open');
-          // Flip upward if tooltip overflows below the viewport
           var rect = tip.getBoundingClientRect();
           var vh = window.innerHeight || document.documentElement.clientHeight;
           if (rect.bottom > vh) {{
@@ -226,44 +264,92 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Agent runner
+# Active task renderer (polling-based, works in right panel or inline)
 # ---------------------------------------------------------------------------
 
-def _run_agent_and_collect(agent_generator, tool_area, thinking_placeholder):
-    """Run an agent generator, render tool cards, return (emails, scores)."""
-    pending_calls: dict[str, dict] = {}
-    collected_emails: list[dict] = []
-    collected_scores: list[dict] = []
-    thinking_text = ""
+def _render_active_tasks(user_id: str) -> None:
+    """Render in-progress and recently completed generation task cards.
 
-    for event in agent_generator:
-        if event.type == "thinking":
-            thinking_text += event.data
-            thinking_placeholder.markdown(
-                render_thinking_box(thinking_text),
-                unsafe_allow_html=True,
-            )
-        elif event.type == "tool_call":
-            tid = event.data.get("tool_use_id", "")
-            pending_calls[tid] = {"name": event.data["name"], "inputs": event.data["inputs"]}
-        elif event.type == "tool_result":
-            tid = event.data.get("tool_use_id", "")
-            result = event.data.get("result", {})
-            name = event.data["name"]
-            call_info = pending_calls.pop(tid, {"name": name, "inputs": {}})
-            with tool_area:
-                render_tool_call_card(call_info["name"], call_info["inputs"], result)
-            if name == "write_outreach_email" and isinstance(result, dict) and "body" in result:
-                collected_emails.append(result)
-            if name == "score_lead" and isinstance(result, dict) and "score" in result:
-                collected_scores.append(result)
-        elif event.type == "complete":
-            st.success("✅ Done!")
-        elif event.type == "error":
-            st.error(f"Agent error: {event.data}")
-            break
+    Polls every 1.5 s while tasks are still running. Saves emails to
+    Supabase history when a task completes, then removes it from the
+    active-task list so it is not processed again.
+    """
+    active_ids = st.session_state.get("_active_task_ids", [])
+    if not active_ids:
+        return
 
-    return collected_emails, collected_scores
+    still_running_ids: list[str] = []
+
+    for task_id in active_ids:
+        # Snapshot under lock — don't hold lock during Streamlit rendering
+        with _TASKS_LOCK:
+            task = _TASKS.get(task_id)
+            if task is None:
+                continue
+            snap_events  = list(task.events)
+            snap_emails  = list(task.emails)
+            snap_scores  = list(task.scores)
+            snap_status  = task.status
+            snap_error   = task.error
+            snap_label   = task.label
+            snap_uid     = task.user_id
+            snap_kind    = task.kind
+
+        icon = "⏳" if snap_status == "running" else ("✅" if snap_status == "done" else "❌")
+        with st.expander(f"{icon} {snap_label}", expanded=(snap_status == "running")):
+            # Thinking box
+            thinking_text = "".join(e.data for e in snap_events if e.type == "thinking")
+            if thinking_text:
+                st.markdown(render_thinking_box(thinking_text), unsafe_allow_html=True)
+
+            # Tool-call cards (replay from accumulated events)
+            pending_calls: dict[str, dict] = {}
+            for e in snap_events:
+                if e.type == "tool_call":
+                    pending_calls[e.data["tool_use_id"]] = e.data
+                elif e.type == "tool_result":
+                    call = pending_calls.pop(e.data.get("tool_use_id", ""), e.data)
+                    render_tool_call_card(
+                        call.get("name", ""),
+                        call.get("inputs", {}),
+                        e.data.get("result"),
+                    )
+
+            if snap_status == "error":
+                st.error(f"Generation failed: {snap_error}")
+
+            # Batch lead-score table (shown once done)
+            if snap_scores and snap_status == "done":
+                df = pd.DataFrame([
+                    {
+                        "Restaurant": s.get("restaurant_name", s.get("lead_id", "")),
+                        "Score": s.get("score", 0),
+                        "GMV/mo (AED)": f"AED {s.get('estimated_monthly_gmv_aed', 0):,.0f}",
+                        "Reasoning": (s.get("reasoning", "")[:80] + "…") if s.get("reasoning") else "",
+                    }
+                    for s in sorted(snap_scores, key=lambda x: x.get("score", 0), reverse=True)
+                ])
+                st.markdown("**Lead Scores**")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Handle completion / cleanup
+        if snap_status == "done":
+            for email in snap_emails:
+                _append_email(snap_uid, email, snap_kind)
+            with _TASKS_LOCK:
+                _TASKS.pop(task_id, None)
+            # Not added to still_running_ids → removed from active list
+        elif snap_status == "error":
+            with _TASKS_LOCK:
+                _TASKS.pop(task_id, None)
+        else:
+            still_running_ids.append(task_id)
+
+    st.session_state["_active_task_ids"] = still_running_ids
+
+    if still_running_ids:
+        time.sleep(1.5)
+        st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -294,11 +380,12 @@ def _render_history(user_id: str):
         st.markdown(f"**{label}**")
         for item in list(group):
             e = item["email"]
-            badge = "🤖 Agent" if item["source"] == "agent" else "⚡ Quick"
+            src = item["source"]
+            badge = "⚡ Quick" if src == "quick" else "🤖 Batch"
             ts = item["timestamp"].strftime("%H:%M")
             key_suffix = f"_{item['timestamp'].isoformat()}"
             with st.expander(
-                f"{badge} · {ts} · {e.get('restaurant_name', '')} — {e.get('subject', '')[:55]}",
+                f"{badge} · {ts} · {e.get('restaurant_name', '')} — {e.get('subject', '')}",
                 expanded=False,
             ):
                 render_email_card(e, key_suffix=key_suffix)
@@ -309,10 +396,10 @@ def _render_history(user_id: str):
 # ---------------------------------------------------------------------------
 
 def render():
-    user_id = get_current_user()  # guaranteed non-None (login gate in app.py)
+    user_id = get_current_user()
     _ensure_history_loaded(user_id)
 
-    # Surface any Supabase errors so they're visible for debugging
+    # Surface any Supabase errors
     supabase_err = st.session_state.get("_supabase_error")
     if supabase_err:
         st.warning(f"⚠️ **Supabase error** (history may not persist): `{supabase_err}`")
@@ -323,164 +410,157 @@ def render():
         "Watch the agent reason through each lead in real time."
     )
 
-    # True while a Quick Outreach generation is running — used to lock filters
-    is_generating = st.session_state.get("_quick_generating", False)
+    # -----------------------------------------------------------------------
+    # Reasoning panel toggle
+    # -----------------------------------------------------------------------
+    show_r = st.session_state.get("_show_reasoning", False)
+    _, toggle_col = st.columns([5, 1])
+    if toggle_col.button(
+        "✕ Reasoning" if show_r else "🔍 Reasoning",
+        key="toggle_r_sales",
+        use_container_width=True,
+    ):
+        st.session_state["_show_reasoning"] = not show_r
+        st.rerun()
 
     # -----------------------------------------------------------------------
-    # Filters — disabled while generation is in progress so a widget change
-    # cannot trigger a rerun that would cancel the running agent
+    # Layout: 3:1 columns when reasoning panel is open, full-width otherwise
     # -----------------------------------------------------------------------
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_areas = st.multiselect(
-            "Filter by Dubai area",
-            options=ALL_AREAS,
-            default=[],
-            placeholder="All areas",
-            disabled=is_generating,
-        )
-        selected_cuisines = st.multiselect(
-            "Filter by cuisine",
-            options=ALL_CUISINES,
-            default=[],
-            placeholder="All cuisines",
-            disabled=is_generating,
-        )
-    with col2:
-        min_score = st.slider("Minimum lead score", min_value=0, max_value=90, value=50, step=5, disabled=is_generating)
-        num_emails = st.slider("Number of emails to generate", min_value=1, max_value=5, value=3, disabled=is_generating)
+    if show_r:
+        left_main, right_panel = st.columns([3, 1])
+    else:
+        left_main = st.container()
+        right_panel = None
 
-    area_filter = ", ".join(selected_areas) if selected_areas else "all"
-    cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
+    with left_main:
+        # -------------------------------------------------------------------
+        # Filters
+        # -------------------------------------------------------------------
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_areas = st.multiselect(
+                "Filter by Dubai area",
+                options=ALL_AREAS,
+                default=[],
+                placeholder="All areas",
+            )
+            selected_cuisines = st.multiselect(
+                "Filter by cuisine",
+                options=ALL_CUISINES,
+                default=[],
+                placeholder="All cuisines",
+            )
+        with col2:
+            min_score = st.slider("Minimum lead score", min_value=0, max_value=90, value=50, step=5)
+            num_emails = st.slider("Number of emails to generate", min_value=1, max_value=5, value=3)
 
-    # -----------------------------------------------------------------------
-    # Live leads table
-    # -----------------------------------------------------------------------
-    all_leads = get_leads()
-    filtered = [
-        l for l in all_leads
-        if (not selected_areas or l.area in selected_areas)
-        and (not selected_cuisines or l.cuisine_type in selected_cuisines)
-    ]
+        area_filter    = ", ".join(selected_areas) if selected_areas else "all"
+        cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
 
-    st.markdown(f"**{len(filtered)} lead{'s' if len(filtered) != 1 else ''} matching filters**")
-    if filtered:
+        # -------------------------------------------------------------------
+        # Lead count + Run Sales Agent button on the same row (#7)
+        # -------------------------------------------------------------------
+        all_leads = get_leads()
+        filtered = [
+            l for l in all_leads
+            if (not selected_areas or l.area in selected_areas)
+            and (not selected_cuisines or l.cuisine_type in selected_cuisines)
+        ]
+
+        cnt_col, btn_col = st.columns([3, 1])
+        cnt_col.markdown(f"**{len(filtered)} lead{'s' if len(filtered) != 1 else ''} matching filters**")
+        run_btn = btn_col.button("🚀 Run Sales Agent", use_container_width=True, key="run_sales")
+
+        if not filtered:
+            st.warning("No leads match the current filters.")
+            if right_panel is None:
+                _render_active_tasks(user_id)
+            _render_history(user_id)
+            return
+
+        # -------------------------------------------------------------------
+        # Leads table — collapsible (#5)
+        # -------------------------------------------------------------------
         scored_leads = sorted(
             [{"lead": l, "score": score_lead(l.lead_id)} for l in filtered],
             key=lambda x: x["score"]["score"],
             reverse=True,
         )
-        row_height = 38
+        row_height   = 38
         table_height = 46 + len(scored_leads) * row_height + 20
-        components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
-    else:
-        st.warning("No leads match the current filters.")
-        _render_history(user_id)
-        return
 
-    # -----------------------------------------------------------------------
-    # Quick Outreach — single lead
-    # -----------------------------------------------------------------------
-    st.markdown("---")
-    st.markdown("**⚡ Quick Outreach** — generate an email for one lead instantly")
+        with st.expander(f"📊 Leads table ({len(scored_leads)} leads)", expanded=True):
+            components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
 
-    if is_generating:
-        st.info("⏳ Generation in progress — filters are locked until complete.")
+        # -------------------------------------------------------------------
+        # Quick Outreach — single lead
+        # -------------------------------------------------------------------
+        st.markdown("---")
+        st.markdown("**⚡ Quick Outreach** — generate an email for one lead instantly")
 
-    qcol1, qcol2 = st.columns([4, 1])
-    with qcol1:
-        lead_options = {item["lead"].name: item["lead"].lead_id for item in scored_leads}
-        chosen_name = st.selectbox(
-            "Lead:",
-            options=list(lead_options.keys()),
-            key="quick_lead_select",
-            label_visibility="collapsed",
-            disabled=is_generating,
-        )
-    with qcol2:
-        quick_btn = st.button("✉️ Generate", key="quick_btn", use_container_width=True, disabled=is_generating)
-
-    # Pop the pending lead set by the previous rerun (if any)
-    pending_lead_id = st.session_state.pop("_pending_quick_lead", None)
-
-    if quick_btn:
-        # Lock all filters on the NEXT rerun so the user can't accidentally
-        # cancel generation by touching a widget
-        st.session_state["_quick_generating"] = True
-        st.session_state["_pending_quick_lead"] = lead_options[chosen_name]
-        st.rerun()
-
-    if pending_lead_id:
-        # This rerun has filters disabled — safe to run the agent now
-        chosen_display = next(
-            (name for name, lid in lead_options.items() if lid == pending_lead_id),
-            pending_lead_id,
-        )
-        st.divider()
-        st.markdown(f"#### ⚡ Generating outreach for {chosen_display}…")
-        thinking_ph = st.empty()
-        tool_area = st.container()
-        with st.spinner("Writing email…"):
-            emails, _ = _run_agent_and_collect(
-                run_sales_agent_for_lead(pending_lead_id),
-                tool_area,
-                thinking_ph,
+        qcol1, qcol2 = st.columns([4, 1])
+        with qcol1:
+            lead_options = {item["lead"].name: item["lead"].lead_id for item in scored_leads}
+            chosen_name = st.selectbox(
+                "Lead:",
+                options=list(lead_options.keys()),
+                key="quick_lead_select",
+                label_visibility="collapsed",
             )
-        for email in emails:
-            _append_email(user_id, email, "quick")
-        if not emails:
-            st.warning("No email was generated. Please try again.")
+        with qcol2:
+            quick_btn = st.button("✉️ Generate", key="quick_btn", use_container_width=True)
 
-        # Unlock filters and rerender
-        st.session_state["_quick_generating"] = False
-        st.rerun()
+        # -------------------------------------------------------------------
+        # Fire off Quick generation
+        # -------------------------------------------------------------------
+        if quick_btn:
+            task_id = str(uuid.uuid4())
+            with _TASKS_LOCK:
+                _TASKS[task_id] = _GenTask(task_id, f"⚡ {chosen_name}", user_id, "quick")
+            threading.Thread(
+                target=_generation_worker,
+                args=(task_id, run_sales_agent_for_lead(lead_options[chosen_name])),
+                daemon=True,
+            ).start()
+            st.session_state.setdefault("_active_task_ids", []).append(task_id)
+            st.rerun()
 
-    # -----------------------------------------------------------------------
-    # Full Sales Agent
-    # -----------------------------------------------------------------------
-    st.markdown("---")
-    run_btn = st.button("🚀 Run Sales Agent (batch)", use_container_width=True, key="run_sales", disabled=is_generating)
-
-    if run_btn:
-        st.divider()
-        st.markdown("#### Agent Reasoning")
-        thinking_ph = st.empty()
-        st.markdown("#### Tool Calls")
-        tool_area = st.container()
-
-        with st.spinner("Agent is running…"):
-            collected_emails, collected_scores = _run_agent_and_collect(
-                run_sales_agent(
+        # -------------------------------------------------------------------
+        # Fire off Batch generation
+        # -------------------------------------------------------------------
+        if run_btn:
+            task_id = str(uuid.uuid4())
+            label = f"🚀 Batch ({area_filter}, {cuisine_filter}, min {min_score})"
+            with _TASKS_LOCK:
+                _TASKS[task_id] = _GenTask(task_id, label, user_id, "batch")
+            threading.Thread(
+                target=_generation_worker,
+                args=(task_id, run_sales_agent(
                     area_filter=area_filter,
                     cuisine_filter=cuisine_filter,
                     min_score=min_score,
                     num_emails=num_emails,
-                ),
-                tool_area,
-                thinking_ph,
-            )
+                )),
+                daemon=True,
+            ).start()
+            st.session_state.setdefault("_active_task_ids", []).append(task_id)
+            st.rerun()
 
-        if collected_scores:
-            st.divider()
-            st.markdown("#### Lead Scores")
-            df = pd.DataFrame([
-                {
-                    "Restaurant": s.get("restaurant_name", s.get("lead_id")),
-                    "Score": s.get("score", 0),
-                    "Monthly GMV (AED)": f"AED {s.get('estimated_monthly_gmv_aed', 0):,.0f}",
-                    "Reasoning": s.get("reasoning", "")[:80] + "…",
-                }
-                for s in sorted(collected_scores, key=lambda x: x.get("score", 0), reverse=True)
-            ])
-            st.dataframe(df, use_container_width=True, hide_index=True)
+        # -------------------------------------------------------------------
+        # Inline task cards (when right panel is closed)
+        # -------------------------------------------------------------------
+        if right_panel is None:
+            _render_active_tasks(user_id)
 
-        for email in collected_emails:
-            _append_email(user_id, email, "agent")
-
-        if not collected_emails:
-            st.warning("No emails were generated. Try lowering the minimum score threshold.")
+        # -------------------------------------------------------------------
+        # Outreach History
+        # -------------------------------------------------------------------
+        _render_history(user_id)
 
     # -----------------------------------------------------------------------
-    # Outreach History (always visible at the bottom)
+    # Right reasoning panel
     # -----------------------------------------------------------------------
-    _render_history(user_id)
+    if right_panel is not None:
+        with right_panel:
+            st.markdown("**🧠 Agent Reasoning**")
+            _render_active_tasks(user_id)

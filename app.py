@@ -77,8 +77,13 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.8 — Changelog", expanded=False):
+    with st.expander("📋 v2.9 — Changelog", expanded=False):
         st.markdown(
+            "**v2.9** — Concurrent Quick & Batch generation (threading) · Login persists across refresh · "
+            "Right-panel reasoning toggle in all tabs · Onboarding plans saved to Supabase · "
+            "Collapsible leads table · Full email subject in history · Batch button inline with lead count · "
+            "Timeline sorted by day + coloured cards · PDF export for onboarding plans · "
+            "Promo description tooltip · Promo override selector\n\n"
             "**v2.8** — Filters locked during Quick Outreach generation · Supabase errors surfaced in UI\n\n"
             "**v2.7** — Realistic menu data for new partners · Blockers vs warnings split in onboarding\n\n"
             "**v2.6** — Restored sidebar toggle & GitHub icon\n\n"

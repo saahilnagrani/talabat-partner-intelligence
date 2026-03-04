@@ -1,7 +1,8 @@
 """
-Supabase-backed persistent email history for the talabat Partner Intelligence demo.
+Supabase-backed persistent storage for the talabat Partner Intelligence demo.
 
-Table DDL (run once in Supabase SQL editor):
+Tables DDL (run once in Supabase SQL editor):
+
     CREATE TABLE email_history (
       id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
       user_id     text NOT NULL,
@@ -9,6 +10,16 @@ Table DDL (run once in Supabase SQL editor):
       timestamp   timestamptz NOT NULL,
       source      text NOT NULL
     );
+    ALTER TABLE email_history DISABLE ROW LEVEL SECURITY;
+
+    CREATE TABLE onboarding_plans (
+      id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+      user_id     text NOT NULL,
+      partner_id  text NOT NULL,
+      plan_data   jsonb NOT NULL,
+      timestamp   timestamptz NOT NULL
+    );
+    ALTER TABLE onboarding_plans DISABLE ROW LEVEL SECURITY;
 """
 from __future__ import annotations
 from datetime import datetime
@@ -34,6 +45,10 @@ def _get_client() -> Client:
         st.secrets["SUPABASE_ANON_KEY"],
     )
 
+
+# ---------------------------------------------------------------------------
+# Email history
+# ---------------------------------------------------------------------------
 
 def load_history(user_id: str) -> list[dict]:
     """Fetch all email history rows for *user_id*, newest first."""
@@ -84,3 +99,58 @@ def clear_history(user_id: str) -> None:
         _clear_error()
     except Exception as e:
         _set_error(f"clear_history failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Onboarding plan persistence
+# ---------------------------------------------------------------------------
+
+def load_onboarding_plans(user_id: str) -> list[dict]:
+    """Fetch all onboarding plans for *user_id*, newest first."""
+    try:
+        res = (
+            _get_client()
+            .table("onboarding_plans")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("timestamp", desc=True)
+            .execute()
+        )
+        rows = res.data or []
+        _clear_error()
+        return [
+            {
+                "plan": r["plan_data"],
+                "partner_id": r["partner_id"],
+                "timestamp": datetime.fromisoformat(r["timestamp"]),
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        _set_error(f"load_onboarding_plans failed: {e}")
+        return []
+
+
+def save_onboarding_plan(user_id: str, partner_id: str, plan: dict, timestamp: datetime) -> None:
+    """Insert one onboarding plan into Supabase."""
+    try:
+        _get_client().table("onboarding_plans").insert(
+            {
+                "user_id": user_id,
+                "partner_id": partner_id,
+                "plan_data": plan,
+                "timestamp": timestamp.isoformat(),
+            }
+        ).execute()
+        _clear_error()
+    except Exception as e:
+        _set_error(f"save_onboarding_plan failed: {e}")
+
+
+def clear_onboarding_plans(user_id: str) -> None:
+    """Delete all onboarding plans for *user_id*."""
+    try:
+        _get_client().table("onboarding_plans").delete().eq("user_id", user_id).execute()
+        _clear_error()
+    except Exception as e:
+        _set_error(f"clear_onboarding_plans failed: {e}")
