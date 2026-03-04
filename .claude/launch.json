@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "talabat-demo",
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-c", "cd /Users/saahilnagrani/Documents/Projects/talabat_partner_intelligence && /Users/saahilnagrani/Library/Python/3.9/bin/streamlit run app.py --server.port 8501 --server.headless true"],
+      "port": 8501
+    }
+  ]
+}
