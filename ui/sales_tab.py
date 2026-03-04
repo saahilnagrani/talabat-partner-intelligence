@@ -323,8 +323,12 @@ def render():
         "Watch the agent reason through each lead in real time."
     )
 
+    # True while a Quick Outreach generation is running — used to lock filters
+    is_generating = st.session_state.get("_quick_generating", False)
+
     # -----------------------------------------------------------------------
-    # Filters
+    # Filters — disabled while generation is in progress so a widget change
+    # cannot trigger a rerun that would cancel the running agent
     # -----------------------------------------------------------------------
     col1, col2 = st.columns(2)
     with col1:
@@ -333,16 +337,18 @@ def render():
             options=ALL_AREAS,
             default=[],
             placeholder="All areas",
+            disabled=is_generating,
         )
         selected_cuisines = st.multiselect(
             "Filter by cuisine",
             options=ALL_CUISINES,
             default=[],
             placeholder="All cuisines",
+            disabled=is_generating,
         )
     with col2:
-        min_score = st.slider("Minimum lead score", min_value=0, max_value=90, value=50, step=5)
-        num_emails = st.slider("Number of emails to generate", min_value=1, max_value=5, value=3)
+        min_score = st.slider("Minimum lead score", min_value=0, max_value=90, value=50, step=5, disabled=is_generating)
+        num_emails = st.slider("Number of emails to generate", min_value=1, max_value=5, value=3, disabled=is_generating)
 
     area_filter = ", ".join(selected_areas) if selected_areas else "all"
     cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
@@ -377,6 +383,10 @@ def render():
     # -----------------------------------------------------------------------
     st.markdown("---")
     st.markdown("**⚡ Quick Outreach** — generate an email for one lead instantly")
+
+    if is_generating:
+        st.info("⏳ Generation in progress — filters are locked until complete.")
+
     qcol1, qcol2 = st.columns([4, 1])
     with qcol1:
         lead_options = {item["lead"].name: item["lead"].lead_id for item in scored_leads}
@@ -385,19 +395,34 @@ def render():
             options=list(lead_options.keys()),
             key="quick_lead_select",
             label_visibility="collapsed",
+            disabled=is_generating,
         )
     with qcol2:
-        quick_btn = st.button("✉️ Generate", key="quick_btn", use_container_width=True)
+        quick_btn = st.button("✉️ Generate", key="quick_btn", use_container_width=True, disabled=is_generating)
+
+    # Pop the pending lead set by the previous rerun (if any)
+    pending_lead_id = st.session_state.pop("_pending_quick_lead", None)
 
     if quick_btn:
-        lead_id = lead_options[chosen_name]
+        # Lock all filters on the NEXT rerun so the user can't accidentally
+        # cancel generation by touching a widget
+        st.session_state["_quick_generating"] = True
+        st.session_state["_pending_quick_lead"] = lead_options[chosen_name]
+        st.rerun()
+
+    if pending_lead_id:
+        # This rerun has filters disabled — safe to run the agent now
+        chosen_display = next(
+            (name for name, lid in lead_options.items() if lid == pending_lead_id),
+            pending_lead_id,
+        )
         st.divider()
-        st.markdown(f"#### ⚡ Generating outreach for {chosen_name}…")
+        st.markdown(f"#### ⚡ Generating outreach for {chosen_display}…")
         thinking_ph = st.empty()
         tool_area = st.container()
         with st.spinner("Writing email…"):
             emails, _ = _run_agent_and_collect(
-                run_sales_agent_for_lead(lead_id),
+                run_sales_agent_for_lead(pending_lead_id),
                 tool_area,
                 thinking_ph,
             )
@@ -406,11 +431,15 @@ def render():
         if not emails:
             st.warning("No email was generated. Please try again.")
 
+        # Unlock filters and rerender
+        st.session_state["_quick_generating"] = False
+        st.rerun()
+
     # -----------------------------------------------------------------------
     # Full Sales Agent
     # -----------------------------------------------------------------------
     st.markdown("---")
-    run_btn = st.button("🚀 Run Sales Agent (batch)", use_container_width=True, key="run_sales")
+    run_btn = st.button("🚀 Run Sales Agent (batch)", use_container_width=True, key="run_sales", disabled=is_generating)
 
     if run_btn:
         st.divider()
