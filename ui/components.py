@@ -192,8 +192,10 @@ def render_score_badge(score: float) -> str:
     return f'<span style="background:{color};color:{"white" if score < 75 or score >= 55 else "#1a1a1a"};padding:3px 10px;border-radius:12px;font-size:0.78em;font-weight:600;">{score:.0f}/100</span>'
 
 
-def render_email_card(email: dict):
+def render_email_card(email: dict, key_suffix: str = ""):
     """Render a generated outreach email in a styled card."""
+    import urllib.parse
+
     st.markdown(
         f'<div class="email-subject">📧 {email.get("subject", "Outreach Email")}</div>',
         unsafe_allow_html=True,
@@ -208,7 +210,7 @@ def render_email_card(email: dict):
         label="",
         value=email.get("body", ""),
         height=300,
-        key=f"email_{email.get('lead_id', 'unknown')}_{email.get('restaurant_name', '')}",
+        key=f"email_{email.get('lead_id', 'unknown')}_{email.get('restaurant_name', '')}{key_suffix}",
         label_visibility="collapsed",
     )
 
@@ -217,6 +219,17 @@ def render_email_card(email: dict):
         st.markdown("**Personalisation signals used:**")
         for sig in signals:
             st.markdown(f"  • {sig}")
+
+    # Launch buttons
+    to  = email.get("owner_email", "")
+    su  = urllib.parse.quote(email.get("subject", ""))
+    bdy = urllib.parse.quote(email.get("body", ""))
+    gmail_url   = f"https://mail.google.com/mail/?view=cm&fs=1&to={urllib.parse.quote(to)}&su={su}&body={bdy}"
+    outlook_url = f"mailto:{to}?subject={urllib.parse.quote(email.get('subject', ''))}&body={bdy}"
+    st.markdown("**Send via:**")
+    c1, c2 = st.columns(2)
+    c1.link_button("📧 Open in Gmail",   gmail_url,   use_container_width=True)
+    c2.link_button("📨 Open in Outlook", outlook_url, use_container_width=True)
 
 
 def render_onboarding_timeline(plan: dict):

@@ -23,6 +23,25 @@ Your workflow:
 Be thorough and data-driven. Every email should reference the specific restaurant's rating, area benchmarks, and platform situation. Do not write generic emails."""
 
 
+def run_sales_agent_for_lead(lead_id: str) -> Generator[AgentEvent, None, None]:
+    """Run the sales agent for a single specific lead by ID."""
+    user_message = (
+        f"Generate a personalised outreach email for lead ID '{lead_id}' only. "
+        "Do not call get_all_leads(). Instead: "
+        "1. Call score_lead() for this lead ID. "
+        "2. Call get_market_benchmarks() for their area and cuisine. "
+        "3. Call get_competitor_analysis() for their current platform. "
+        "4. Call generate_value_proposition() for this lead. "
+        "5. Call write_outreach_email() to produce the final email."
+    )
+    yield from run_agent(
+        system_prompt=SYSTEM_PROMPT,
+        user_message=user_message,
+        tools=SALES_TOOL_SCHEMAS,
+        tool_registry=SALES_TOOL_REGISTRY,
+    )
+
+
 def run_sales_agent(
     area_filter: str = "all",
     cuisine_filter: str = "all",

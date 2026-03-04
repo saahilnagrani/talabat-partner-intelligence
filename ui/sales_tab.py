@@ -4,8 +4,10 @@ Tab 1: Sales Acquisition Agent UI.
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
+from datetime import datetime, date, timedelta
+from itertools import groupby
 from data.seed import MARKET_BENCHMARKS, get_leads
-from agents.sales_agent import run_sales_agent
+from agents.sales_agent import run_sales_agent, run_sales_agent_for_lead
 from tools.sales_tools import score_lead
 from ui.components import (
     render_thinking_box,
@@ -173,14 +175,91 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
     </script>"""
 
 
+def _run_agent_and_collect(agent_generator, tool_area, thinking_placeholder):
+    """Run an agent generator, render tool cards, return (emails, scores)."""
+    pending_calls: dict[str, dict] = {}
+    collected_emails: list[dict] = []
+    collected_scores: list[dict] = []
+    thinking_text = ""
+
+    for event in agent_generator:
+        if event.type == "thinking":
+            thinking_text += event.data
+            thinking_placeholder.markdown(
+                render_thinking_box(thinking_text),
+                unsafe_allow_html=True,
+            )
+        elif event.type == "tool_call":
+            tid = event.data.get("tool_use_id", "")
+            pending_calls[tid] = {"name": event.data["name"], "inputs": event.data["inputs"]}
+        elif event.type == "tool_result":
+            tid = event.data.get("tool_use_id", "")
+            result = event.data.get("result", {})
+            name = event.data["name"]
+            call_info = pending_calls.pop(tid, {"name": name, "inputs": {}})
+            with tool_area:
+                render_tool_call_card(call_info["name"], call_info["inputs"], result)
+            if name == "write_outreach_email" and isinstance(result, dict) and "body" in result:
+                collected_emails.append(result)
+            if name == "score_lead" and isinstance(result, dict) and "score" in result:
+                collected_scores.append(result)
+        elif event.type == "complete":
+            st.success("✅ Done!")
+        elif event.type == "error":
+            st.error(f"Agent error: {event.data}")
+            break
+
+    return collected_emails, collected_scores
+
+
+def _render_history():
+    """Render the persisted outreach email history grouped by date."""
+    if not st.session_state.email_history:
+        return
+
+    st.divider()
+    hcol1, hcol2 = st.columns([6, 1])
+    hcol1.markdown("### 📬 Outreach History")
+    if hcol2.button("🗑 Clear", key="clear_history"):
+        st.session_state.email_history = []
+        st.rerun()
+
+    history = sorted(st.session_state.email_history, key=lambda x: x["timestamp"], reverse=True)
+    today = date.today()
+    for dt_date, group in groupby(history, key=lambda x: x["timestamp"].date()):
+        if dt_date == today:
+            label = "Today"
+        elif dt_date == today - timedelta(days=1):
+            label = "Yesterday"
+        else:
+            label = dt_date.strftime("%d %B %Y")
+        st.markdown(f"**{label}**")
+        for item in list(group):
+            e = item["email"]
+            badge = "🤖 Agent" if item["source"] == "agent" else "⚡ Quick"
+            ts = item["timestamp"].strftime("%H:%M")
+            key_suffix = f"_{item['timestamp'].isoformat()}"
+            with st.expander(
+                f"{badge} · {ts} · {e.get('restaurant_name', '')} — {e.get('subject', '')[:55]}",
+                expanded=False,
+            ):
+                render_email_card(e, key_suffix=key_suffix)
+
+
 def render():
+    # Session state for email persistence
+    if "email_history" not in st.session_state:
+        st.session_state.email_history = []
+
     st.markdown(
         "### 🎯 Sales Acquisition Agent\n"
         "Scores restaurant leads, selects top prospects, and writes personalised outreach emails. "
         "Watch the agent reason through each lead in real time."
     )
 
-    # Controls
+    # -----------------------------------------------------------------------
+    # Filters
+    # -----------------------------------------------------------------------
     col1, col2 = st.columns(2)
     with col1:
         selected_areas = st.multiselect(
@@ -202,7 +281,9 @@ def render():
     area_filter = ", ".join(selected_areas) if selected_areas else "all"
     cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
 
-    # Live leads preview table
+    # -----------------------------------------------------------------------
+    # Live leads table
+    # -----------------------------------------------------------------------
     all_leads = get_leads()
     filtered = [
         l for l in all_leads
@@ -222,97 +303,97 @@ def render():
         components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
     else:
         st.warning("No leads match the current filters.")
-
-    run_btn = st.button("🚀 Run Sales Agent", use_container_width=True, key="run_sales", disabled=not filtered)
-
-    if not run_btn:
-        st.info("Configure your filters above and click **Run Sales Agent** to start.")
+        _render_history()
         return
 
     # -----------------------------------------------------------------------
-    # Agent execution
+    # Quick Outreach — single lead
     # -----------------------------------------------------------------------
-    st.divider()
-    st.markdown("#### Agent Reasoning")
-    thinking_placeholder = st.empty()
-    thinking_text = ""
+    st.markdown("---")
+    st.markdown("**⚡ Quick Outreach** — generate an email for one lead instantly")
+    qcol1, qcol2 = st.columns([4, 1])
+    with qcol1:
+        lead_options = {item["lead"].name: item["lead"].lead_id for item in scored_leads}
+        chosen_name = st.selectbox(
+            "Lead:",
+            options=list(lead_options.keys()),
+            key="quick_lead_select",
+            label_visibility="collapsed",
+        )
+    with qcol2:
+        quick_btn = st.button("✉️ Generate", key="quick_btn", use_container_width=True)
 
-    st.markdown("#### Tool Calls")
-    tool_area = st.container()
+    if quick_btn:
+        lead_id = lead_options[chosen_name]
+        st.divider()
+        st.markdown(f"#### ⚡ Generating outreach for {chosen_name}…")
+        thinking_ph = st.empty()
+        tool_area = st.container()
+        with st.spinner("Writing email…"):
+            emails, _ = _run_agent_and_collect(
+                run_sales_agent_for_lead(lead_id),
+                tool_area,
+                thinking_ph,
+            )
+        for email in emails:
+            st.session_state.email_history.append({
+                "email": email,
+                "timestamp": datetime.now(),
+                "source": "quick",
+            })
+        if not emails:
+            st.warning("No email was generated. Please try again.")
 
-    pending_calls: dict[str, dict] = {}  # tool_use_id -> {name, inputs}
-    collected_emails: list[dict] = []
-    collected_scores: list[dict] = []
+    # -----------------------------------------------------------------------
+    # Full Sales Agent
+    # -----------------------------------------------------------------------
+    st.markdown("---")
+    run_btn = st.button("🚀 Run Sales Agent (batch)", use_container_width=True, key="run_sales")
 
-    with st.spinner("Agent is running…"):
-        for event in run_sales_agent(
-            area_filter=area_filter,
-            cuisine_filter=cuisine_filter,
-            min_score=min_score,
-            num_emails=num_emails,
-        ):
-            if event.type == "thinking":
-                thinking_text += event.data
-                thinking_placeholder.markdown(
-                    render_thinking_box(thinking_text),
-                    unsafe_allow_html=True,
-                )
+    if run_btn:
+        st.divider()
+        st.markdown("#### Agent Reasoning")
+        thinking_ph = st.empty()
+        st.markdown("#### Tool Calls")
+        tool_area = st.container()
 
-            elif event.type == "tool_call":
-                tid = event.data.get("tool_use_id", "")
-                pending_calls[tid] = {
-                    "name": event.data["name"],
-                    "inputs": event.data["inputs"],
+        with st.spinner("Agent is running…"):
+            collected_emails, collected_scores = _run_agent_and_collect(
+                run_sales_agent(
+                    area_filter=area_filter,
+                    cuisine_filter=cuisine_filter,
+                    min_score=min_score,
+                    num_emails=num_emails,
+                ),
+                tool_area,
+                thinking_ph,
+            )
+
+        if collected_scores:
+            st.divider()
+            st.markdown("#### Lead Scores")
+            df = pd.DataFrame([
+                {
+                    "Restaurant": s.get("restaurant_name", s.get("lead_id")),
+                    "Score": s.get("score", 0),
+                    "Monthly GMV (AED)": f"AED {s.get('estimated_monthly_gmv_aed', 0):,.0f}",
+                    "Reasoning": s.get("reasoning", "")[:80] + "…",
                 }
+                for s in sorted(collected_scores, key=lambda x: x.get("score", 0), reverse=True)
+            ])
+            st.dataframe(df, use_container_width=True, hide_index=True)
 
-            elif event.type == "tool_result":
-                tid = event.data.get("tool_use_id", "")
-                result = event.data.get("result", {})
-                name = event.data["name"]
+        for email in collected_emails:
+            st.session_state.email_history.append({
+                "email": email,
+                "timestamp": datetime.now(),
+                "source": "agent",
+            })
 
-                # Render tool card
-                call_info = pending_calls.pop(tid, {"name": name, "inputs": {}})
-                with tool_area:
-                    render_tool_call_card(call_info["name"], call_info["inputs"], result)
-
-                # Collect structured results
-                if name == "write_outreach_email" and isinstance(result, dict) and "body" in result:
-                    collected_emails.append(result)
-                if name == "score_lead" and isinstance(result, dict) and "score" in result:
-                    collected_scores.append(result)
-
-            elif event.type == "complete":
-                st.success("✅ Agent complete!")
-
-            elif event.type == "error":
-                st.error(f"Agent error: {event.data}")
-                return
+        if not collected_emails:
+            st.warning("No emails were generated. Try lowering the minimum score threshold.")
 
     # -----------------------------------------------------------------------
-    # Results
+    # Outreach History (always visible at the bottom)
     # -----------------------------------------------------------------------
-    if collected_scores:
-        st.divider()
-        st.markdown("#### Lead Scores")
-        df = pd.DataFrame([
-            {
-                "Restaurant": s.get("restaurant_name", s.get("lead_id")),
-                "Score": s.get("score", 0),
-                "Monthly GMV (AED)": f"AED {s.get('estimated_monthly_gmv_aed', 0):,.0f}",
-                "Reasoning": s.get("reasoning", "")[:80] + "…",
-            }
-            for s in sorted(collected_scores, key=lambda x: x.get("score", 0), reverse=True)
-        ])
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
-    if collected_emails:
-        st.divider()
-        st.markdown(f"#### Generated Outreach Emails ({len(collected_emails)})")
-        for i, email in enumerate(collected_emails, 1):
-            with st.expander(
-                f"📧 Email {i}: {email.get('restaurant_name', 'Unknown')} — {email.get('subject', '')[:60]}",
-                expanded=(i == 1),
-            ):
-                render_email_card(email)
-    elif not collected_emails and run_btn:
-        st.warning("No emails were generated. Try lowering the minimum score threshold.")
+    _render_history()
