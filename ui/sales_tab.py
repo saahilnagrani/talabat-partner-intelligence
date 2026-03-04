@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from data.seed import MARKET_BENCHMARKS, get_leads
 from agents.sales_agent import run_sales_agent
+from tools.sales_tools import score_lead
 from ui.components import (
     render_thinking_box,
     render_tool_call_card,
@@ -18,6 +19,90 @@ ALL_CUISINES = [
     "Japanese", "Korean", "Filipino", "Thai", "Vietnamese",
     "Mexican", "Persian", "Emirati", "Chinese",
 ]
+
+
+def _render_leads_table(scored_leads: list[dict]) -> str:
+    """Render leads as an HTML table with per-row score tooltip."""
+    rows = ""
+    for item in scored_leads:
+        l = item["lead"]
+        s = item["score"]
+        bd = s["breakdown"]
+        score_val = s["score"]
+
+        score_color = (
+            "#28a745" if score_val >= 75 else
+            "#FF6000" if score_val >= 50 else
+            "#6c757d"
+        )
+        tooltip = (
+            f"Orders: {bd['order_volume_potential']}/30&#10;"
+            f"Ticket size: {bd['ticket_size_quality']}/25&#10;"
+            f"Brand rating: {bd['brand_quality_rating']}/20&#10;"
+            f"Delivery gap: {bd['delivery_gap_opportunity']}/15&#10;"
+            f"Platform gap: {bd['platform_exclusivity']}/10"
+        )
+        platform = l.current_platform or "—"
+
+        rows += f"""
+        <tr>
+          <td>{l.name}</td>
+          <td>{l.area}</td>
+          <td>{l.cuisine_type}</td>
+          <td style="text-align:right">{l.estimated_monthly_orders:,}</td>
+          <td style="text-align:right">AED {l.avg_ticket_aed:.0f}</td>
+          <td style="text-align:right">{l.google_rating} ⭐</td>
+          <td style="text-align:right">{l.num_reviews:,}</td>
+          <td>{platform}</td>
+          <td style="text-align:center">
+            <span style="
+              font-weight:700;
+              color:{score_color};
+              border-bottom:1px dashed {score_color};
+              cursor:help;
+              white-space:nowrap;
+            " title="{tooltip}">{score_val:.0f} ℹ</span>
+          </td>
+        </tr>"""
+
+    return f"""
+    <style>
+      .leads-tbl {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85em;
+        color: #e0e0e0;
+      }}
+      .leads-tbl th {{
+        background: #2a2a2a;
+        color: #aaa;
+        font-weight: 600;
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #444;
+        white-space: nowrap;
+      }}
+      .leads-tbl td {{
+        padding: 7px 12px;
+        border-bottom: 1px solid #2a2a2a;
+        vertical-align: middle;
+      }}
+      .leads-tbl tr:hover td {{ background: #1e1e1e; }}
+    </style>
+    <table class="leads-tbl">
+      <thead><tr>
+        <th>Restaurant</th>
+        <th>Area</th>
+        <th>Cuisine</th>
+        <th style="text-align:right">Est. Orders/mo</th>
+        <th style="text-align:right">Avg Ticket</th>
+        <th style="text-align:right">Rating</th>
+        <th style="text-align:right">Reviews</th>
+        <th>Platform</th>
+        <th style="text-align:center">Score /100</th>
+      </tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"""
 
 
 def render():
@@ -59,20 +144,12 @@ def render():
 
     st.markdown(f"**{len(filtered)} lead{'s' if len(filtered) != 1 else ''} matching filters**")
     if filtered:
-        df_preview = pd.DataFrame([
-            {
-                "Restaurant": l.name,
-                "Area": l.area,
-                "Cuisine": l.cuisine_type,
-                "Est. Orders/mo": l.estimated_monthly_orders,
-                "Avg Ticket (AED)": l.avg_ticket_aed,
-                "Rating": l.google_rating,
-                "Reviews": l.num_reviews,
-                "Platform": l.current_platform or "—",
-            }
-            for l in sorted(filtered, key=lambda x: x.estimated_monthly_orders, reverse=True)
-        ])
-        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+        scored_leads = sorted(
+            [{"lead": l, "score": score_lead(l.lead_id)} for l in filtered],
+            key=lambda x: x["score"]["score"],
+            reverse=True,
+        )
+        st.html(_render_leads_table(scored_leads))
     else:
         st.warning("No leads match the current filters.")
 
