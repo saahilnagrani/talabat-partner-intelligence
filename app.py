@@ -5,6 +5,7 @@ Main Streamlit application entry point.
 import streamlit as st
 from config import get_api_key
 from ui.components import inject_css, render_header
+from auth import get_current_user, show_login_form, logout, get_display_name
 import ui.sales_tab as sales_tab
 import ui.onboarding_tab as onboarding_tab
 import ui.retention_tab as retention_tab
@@ -65,9 +66,18 @@ with st.sidebar:
             import os
             os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    # 6. Version
+    # 6. Logged-in user + sign-out
+    current_user = get_current_user()
+    if current_user:
+        st.divider()
+        display = get_display_name(current_user)
+        st.markdown(f"**Signed in as:** {display}")
+        if st.button("Sign out", key="signout", use_container_width=True):
+            logout()
+
+    # 7. Version
     st.divider()
-    st.caption("v2.1 — Quick Outreach · Email History · Gmail/Outlook")
+    st.caption("v2.2 — Login · Persistent History · Gmail/Outlook")
 
 # ---------------------------------------------------------------------------
 # Main content
@@ -80,6 +90,18 @@ if not get_api_key():
         "Add it in the sidebar or set `ANTHROPIC_API_KEY` in your `.env` file to run the agents."
     )
 
+# ---------------------------------------------------------------------------
+# Login gate — show login form if not authenticated
+# ---------------------------------------------------------------------------
+if not get_current_user():
+    _, col, _ = st.columns([1, 2, 1])
+    with col:
+        show_login_form()
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Tabs (only rendered when authenticated)
+# ---------------------------------------------------------------------------
 tab1, tab2, tab3 = st.tabs([
     "🎯 Sales Acquisition",
     "📋 Partner Onboarding",

@@ -15,6 +15,8 @@ from ui.components import (
     render_email_card,
     render_score_badge,
 )
+from auth import get_current_user
+from storage import load_history, save_email, clear_history
 
 ALL_AREAS = list(MARKET_BENCHMARKS.keys())
 ALL_CUISINES = [
@@ -23,6 +25,38 @@ ALL_CUISINES = [
     "Mexican", "Persian", "Emirati", "Chinese",
 ]
 
+
+# ---------------------------------------------------------------------------
+# Supabase-backed history helpers
+# ---------------------------------------------------------------------------
+
+def _ensure_history_loaded(user_id: str) -> None:
+    """Load email history from Supabase on the first render of this session.
+
+    Subsequent reruns read from the in-memory cache so we don't hammer the DB.
+    """
+    if "email_history_cache" not in st.session_state:
+        st.session_state.email_history_cache = load_history(user_id)
+
+
+def _append_email(user_id: str, email: dict, source: str) -> None:
+    """Prepend to the local cache and persist to Supabase."""
+    ts = datetime.now()
+    entry = {"email": email, "timestamp": ts, "source": source}
+    # Prepend so newest-first order is maintained without re-sorting
+    st.session_state.email_history_cache.insert(0, entry)
+    save_email(user_id, email, source, ts)
+
+
+def _clear_history(user_id: str) -> None:
+    """Wipe the local cache and delete from Supabase."""
+    st.session_state.email_history_cache = []
+    clear_history(user_id)
+
+
+# ---------------------------------------------------------------------------
+# Leads table
+# ---------------------------------------------------------------------------
 
 def _render_leads_table(scored_leads: list[dict]) -> str:
     """Render leads as a sortable HTML table with per-row score popup."""
@@ -191,6 +225,10 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
     </script>"""
 
 
+# ---------------------------------------------------------------------------
+# Agent runner
+# ---------------------------------------------------------------------------
+
 def _run_agent_and_collect(agent_generator, tool_area, thinking_placeholder):
     """Run an agent generator, render tool cards, return (emails, scores)."""
     pending_calls: dict[str, dict] = {}
@@ -228,19 +266,23 @@ def _run_agent_and_collect(agent_generator, tool_area, thinking_placeholder):
     return collected_emails, collected_scores
 
 
-def _render_history():
+# ---------------------------------------------------------------------------
+# History rendering
+# ---------------------------------------------------------------------------
+
+def _render_history(user_id: str):
     """Render the persisted outreach email history grouped by date."""
-    if not st.session_state.email_history:
+    history = st.session_state.get("email_history_cache", [])
+    if not history:
         return
 
     st.divider()
     hcol1, hcol2 = st.columns([6, 1])
     hcol1.markdown("### 📬 Outreach History")
     if hcol2.button("🗑 Clear", key="clear_history"):
-        st.session_state.email_history = []
+        _clear_history(user_id)
         st.rerun()
 
-    history = sorted(st.session_state.email_history, key=lambda x: x["timestamp"], reverse=True)
     today = date.today()
     for dt_date, group in groupby(history, key=lambda x: x["timestamp"].date()):
         if dt_date == today:
@@ -262,10 +304,13 @@ def _render_history():
                 render_email_card(e, key_suffix=key_suffix)
 
 
+# ---------------------------------------------------------------------------
+# Main render
+# ---------------------------------------------------------------------------
+
 def render():
-    # Session state for email persistence
-    if "email_history" not in st.session_state:
-        st.session_state.email_history = []
+    user_id = get_current_user()  # guaranteed non-None (login gate in app.py)
+    _ensure_history_loaded(user_id)
 
     st.markdown(
         "### 🎯 Sales Acquisition Agent\n"
@@ -319,7 +364,7 @@ def render():
         components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
     else:
         st.warning("No leads match the current filters.")
-        _render_history()
+        _render_history(user_id)
         return
 
     # -----------------------------------------------------------------------
@@ -352,11 +397,7 @@ def render():
                 thinking_ph,
             )
         for email in emails:
-            st.session_state.email_history.append({
-                "email": email,
-                "timestamp": datetime.now(),
-                "source": "quick",
-            })
+            _append_email(user_id, email, "quick")
         if not emails:
             st.warning("No email was generated. Please try again.")
 
@@ -400,11 +441,7 @@ def render():
             st.dataframe(df, use_container_width=True, hide_index=True)
 
         for email in collected_emails:
-            st.session_state.email_history.append({
-                "email": email,
-                "timestamp": datetime.now(),
-                "source": "agent",
-            })
+            _append_email(user_id, email, "agent")
 
         if not collected_emails:
             st.warning("No emails were generated. Try lowering the minimum score threshold.")
@@ -412,4 +449,4 @@ def render():
     # -----------------------------------------------------------------------
     # Outreach History (always visible at the bottom)
     # -----------------------------------------------------------------------
-    _render_history()
+    _render_history(user_id)
