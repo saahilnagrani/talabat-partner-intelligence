@@ -3,6 +3,7 @@ Tab 1: Sales Acquisition Agent UI.
 """
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 from data.seed import MARKET_BENCHMARKS, get_leads
 from agents.sales_agent import run_sales_agent
 from tools.sales_tools import score_lead
@@ -22,7 +23,9 @@ ALL_CUISINES = [
 
 
 def _render_leads_table(scored_leads: list[dict]) -> str:
-    """Render leads as an HTML table with per-row score tooltip."""
+    """Render leads as a sortable HTML table with per-row score popup."""
+    NUMERIC = [3, 4, 5, 6, 8]  # column indices that sort numerically
+
     rows = ""
     for item in scored_leads:
         l = item["lead"]
@@ -35,12 +38,14 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
             "#FF6000" if score_val >= 50 else
             "#6c757d"
         )
-        tooltip = (
-            f"Orders: {bd['order_volume_potential']}/30&#10;"
-            f"Ticket size: {bd['ticket_size_quality']}/25&#10;"
-            f"Brand rating: {bd['brand_quality_rating']}/20&#10;"
-            f"Delivery gap: {bd['delivery_gap_opportunity']}/15&#10;"
-            f"Platform gap: {bd['platform_exclusivity']}/10"
+        breakdown_html = (
+            f'<div class="tt-row"><span>Orders</span><span>{bd["order_volume_potential"]:.1f} / 30</span></div>'
+            f'<div class="tt-row"><span>Ticket size</span><span>{bd["ticket_size_quality"]:.1f} / 25</span></div>'
+            f'<div class="tt-row"><span>Brand rating</span><span>{bd["brand_quality_rating"]:.1f} / 20</span></div>'
+            f'<div class="tt-row"><span>Delivery gap</span><span>{bd["delivery_gap_opportunity"]:.0f} / 15</span></div>'
+            f'<div class="tt-row"><span>Platform gap</span><span>{bd["platform_exclusivity"]:.0f} / 10</span></div>'
+            f'<hr class="tt-div"/>'
+            f'<div class="tt-total"><span>Total</span><span>{score_val:.0f} / 100</span></div>'
         )
         platform = l.current_platform or "—"
 
@@ -49,60 +54,123 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
           <td>{l.name}</td>
           <td>{l.area}</td>
           <td>{l.cuisine_type}</td>
-          <td style="text-align:right">{l.estimated_monthly_orders:,}</td>
-          <td style="text-align:right">AED {l.avg_ticket_aed:.0f}</td>
-          <td style="text-align:right">{l.google_rating} ⭐</td>
-          <td style="text-align:right">{l.num_reviews:,}</td>
+          <td style="text-align:right" data-sort="{l.estimated_monthly_orders}">{l.estimated_monthly_orders:,}</td>
+          <td style="text-align:right" data-sort="{l.avg_ticket_aed}">AED {l.avg_ticket_aed:.0f}</td>
+          <td style="text-align:right" data-sort="{l.google_rating}">{l.google_rating} ⭐</td>
+          <td style="text-align:right" data-sort="{l.num_reviews}">{l.num_reviews:,}</td>
           <td>{platform}</td>
-          <td style="text-align:center">
-            <span style="
-              font-weight:700;
-              color:{score_color};
-              border-bottom:1px dashed {score_color};
-              cursor:help;
-              white-space:nowrap;
-            " title="{tooltip}">{score_val:.0f} ℹ</span>
+          <td style="text-align:center;white-space:nowrap" data-sort="{score_val:.1f}">
+            <span style="font-weight:700;color:{score_color}">{score_val:.0f}</span>
+            <span class="info-btn" onclick="toggleTip(this)">ℹ</span>
+            <div class="score-tip">{breakdown_html}</div>
           </td>
         </tr>"""
+
+    headers = [
+        ("Restaurant", "text-align:left"),
+        ("Area", "text-align:left"),
+        ("Cuisine", "text-align:left"),
+        ("Est. Orders/mo", "text-align:right"),
+        ("Avg Ticket", "text-align:right"),
+        ("Rating", "text-align:right"),
+        ("Reviews", "text-align:right"),
+        ("Platform", "text-align:left"),
+        ("Score /100", "text-align:center"),
+    ]
+    header_cells = "".join(
+        f'<th style="{sty}" onclick="sortCol({i})">{label}'
+        f'<span class="sort-icon" id="si-{i}"></span></th>'
+        for i, (label, sty) in enumerate(headers)
+    )
 
     return f"""
     <style>
       .leads-tbl {{
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.85em;
-        color: #e0e0e0;
+        width:100%; border-collapse:collapse;
+        font-size:0.85em; color:#e0e0e0;
       }}
       .leads-tbl th {{
-        background: #2a2a2a;
-        color: #aaa;
-        font-weight: 600;
-        padding: 8px 12px;
-        text-align: left;
-        border-bottom: 1px solid #444;
-        white-space: nowrap;
+        background:#2a2a2a; color:#aaa; font-weight:600;
+        padding:8px 12px; text-align:left;
+        border-bottom:1px solid #444; white-space:nowrap;
+        cursor:pointer; user-select:none;
       }}
+      .leads-tbl th:hover {{ color:#FF6000; }}
+      .sort-icon {{ color:#FF6000; font-size:0.8em; margin-left:3px; }}
       .leads-tbl td {{
-        padding: 7px 12px;
-        border-bottom: 1px solid #2a2a2a;
-        vertical-align: middle;
+        padding:7px 12px; border-bottom:1px solid #2a2a2a;
+        vertical-align:middle; position:relative;
       }}
-      .leads-tbl tr:hover td {{ background: #1e1e1e; }}
+      .leads-tbl tr:hover td {{ background:#1e1e1e; }}
+      .info-btn {{
+        cursor:pointer; color:#888; font-size:0.85em;
+        padding:1px 4px; border-radius:3px; margin-left:2px;
+      }}
+      .info-btn:hover {{ color:#FF6000; }}
+      .score-tip {{
+        display:none; position:absolute; right:0; top:calc(100% + 2px);
+        background:#2a2a2a; border:1px solid #555; border-radius:8px;
+        padding:10px 14px; z-index:9999; min-width:190px;
+        box-shadow:0 6px 20px rgba(0,0,0,0.7); font-size:0.88em;
+      }}
+      .score-tip.open {{ display:block; }}
+      .tt-row {{
+        display:flex; justify-content:space-between; gap:20px;
+        padding:3px 0; color:#bbb;
+      }}
+      .tt-row span:last-child {{ font-weight:600; color:#e0e0e0; }}
+      .tt-div {{ border:none; border-top:1px solid #444; margin:6px 0; }}
+      .tt-total {{
+        display:flex; justify-content:space-between; gap:20px;
+        padding:3px 0; font-weight:700; color:#FF6000;
+      }}
     </style>
-    <table class="leads-tbl">
-      <thead><tr>
-        <th>Restaurant</th>
-        <th>Area</th>
-        <th>Cuisine</th>
-        <th style="text-align:right">Est. Orders/mo</th>
-        <th style="text-align:right">Avg Ticket</th>
-        <th style="text-align:right">Rating</th>
-        <th style="text-align:right">Reviews</th>
-        <th>Platform</th>
-        <th style="text-align:center">Score /100</th>
-      </tr></thead>
+
+    <table id="leads-tbl" class="leads-tbl">
+      <thead><tr>{header_cells}</tr></thead>
       <tbody>{rows}</tbody>
-    </table>"""
+    </table>
+
+    <script>
+      var _sortDir = {{}};
+      function sortCol(idx) {{
+        var tbl = document.getElementById('leads-tbl');
+        var tbody = tbl.tBodies[0];
+        var rows = Array.from(tbody.rows);
+        var numeric = {NUMERIC};
+        _sortDir[idx] = (_sortDir[idx] === 'asc') ? 'desc' : 'asc';
+        var asc = _sortDir[idx] === 'asc';
+        document.querySelectorAll('.sort-icon').forEach(function(e) {{ e.textContent = ''; }});
+        document.getElementById('si-' + idx).textContent = asc ? ' ▲' : ' ▼';
+        rows.sort(function(a, b) {{
+          var av = a.cells[idx].dataset.sort !== undefined
+            ? a.cells[idx].dataset.sort
+            : a.cells[idx].textContent.trim();
+          var bv = b.cells[idx].dataset.sort !== undefined
+            ? b.cells[idx].dataset.sort
+            : b.cells[idx].textContent.trim();
+          if (numeric.indexOf(idx) !== -1) {{ return asc ? +av - +bv : +bv - +av; }}
+          return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+        }});
+        rows.forEach(function(r) {{ tbody.appendChild(r); }});
+      }}
+      function toggleTip(btn) {{
+        var tip = btn.nextElementSibling;
+        var wasOpen = tip.classList.contains('open');
+        document.querySelectorAll('.score-tip.open').forEach(function(e) {{ e.classList.remove('open'); }});
+        if (!wasOpen) {{
+          tip.classList.add('open');
+          setTimeout(function() {{
+            document.addEventListener('click', function close(e) {{
+              if (!tip.contains(e.target) && e.target !== btn) {{
+                tip.classList.remove('open');
+                document.removeEventListener('click', close);
+              }}
+            }});
+          }}, 0);
+        }}
+      }}
+    </script>"""
 
 
 def render():
@@ -149,7 +217,9 @@ def render():
             key=lambda x: x["score"]["score"],
             reverse=True,
         )
-        st.html(_render_leads_table(scored_leads))
+        row_height = 38
+        table_height = 46 + len(scored_leads) * row_height + 20
+        components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
     else:
         st.warning("No leads match the current filters.")
 
