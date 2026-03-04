@@ -75,9 +75,21 @@ with st.sidebar:
         if st.button("Sign out", key="signout", use_container_width=True):
             logout()
 
-    # 7. Version
+    # 7. Version + Changelog
     st.divider()
-    st.caption("v2.6 — Login · Persistent History · Gmail/Outlook")
+    with st.expander("📋 v2.6 — Changelog", expanded=False):
+        st.markdown(
+            "**v2.6** — Restored sidebar toggle & GitHub icon\n\n"
+            "**v2.5** — Transparent header (no Streamlit branding)\n\n"
+            "**v2.2** — User login (alice/bob) · Supabase-persistent "
+            "email history · per-user isolation\n\n"
+            "**v2.1** — ⚡ Quick Outreach · 📬 Email history grouped "
+            "by date · Gmail & Outlook launch buttons\n\n"
+            "**v2.0** — Sortable leads table · Score tooltips (ℹ) · "
+            "Full-width tabs · One-line header\n\n"
+            "**v1.0** — Initial release: Sales · Onboarding · "
+            "Retention agent tabs"
+        )
 
 # ---------------------------------------------------------------------------
 # Main content
