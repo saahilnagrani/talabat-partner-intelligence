@@ -130,9 +130,9 @@ def inject_css():
             #MainMenu {{visibility: hidden;}}
             footer {{visibility: hidden;}}
 
-            /* Reduce default top whitespace */
+            /* Reduce default top whitespace without clipping the header */
             .stMainBlockContainer {{
-                padding-top: 1.5rem !important;
+                padding-top: 2.5rem !important;
             }}
             [data-testid="stHeader"] {{
                 height: 0 !important;
