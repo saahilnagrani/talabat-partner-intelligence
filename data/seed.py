@@ -38,9 +38,9 @@ _LEADS_RAW = [
 
     dict(lead_id="lead_005", name="Seoul Bites", cuisine_type="Korean",
          area="Dubai Marina", estimated_monthly_orders=390, avg_ticket_aed=72,
-         google_rating=4.4, num_reviews=289, has_delivery=True, current_platform="Zomato",
+         google_rating=4.4, num_reviews=289, has_delivery=True, current_platform="Careem Food",
          owner_name="Min-Ji Park", owner_phone="+971505234565", owner_email="minji@seoulbites.ae",
-         notes="Korean BBQ and fried chicken. Frustrated with Zomato's customer service."),
+         notes="Korean BBQ and fried chicken. On Careem Food but volume is low — owner frustrated with poor discoverability."),
 
     # Deira / Bur Dubai — high volume, budget-friendly
     dict(lead_id="lead_006", name="Karachi Darbar Express", cuisine_type="Pakistani",
@@ -51,9 +51,9 @@ _LEADS_RAW = [
 
     dict(lead_id="lead_007", name="Punjab Da Dhaba", cuisine_type="Indian",
          area="Deira", estimated_monthly_orders=920, avg_ticket_aed=38,
-         google_rating=4.5, num_reviews=1834, has_delivery=True, current_platform="Zomato",
-         owner_name="Gurpreet Singh", owner_phone="+971507234567", owner_email="gurpreet@punjabadhaba.ae",
-         notes="Best butter chicken in Deira. On Zomato but wants better analytics. Huge review base."),
+         google_rating=4.5, num_reviews=1834, has_delivery=True, current_platform="Noon Food",
+         owner_name="Gurpreet Singh", owner_phone="+971507234567", owner_email="gurpreet@punjabdhaba.ae",
+         notes="Best butter chicken in Deira. On Noon Food but wants better analytics and a larger customer base. Huge review base."),
 
     dict(lead_id="lead_008", name="Spice of Persia", cuisine_type="Persian",
          area="Deira", estimated_monthly_orders=340, avg_ticket_aed=55,
@@ -63,9 +63,9 @@ _LEADS_RAW = [
 
     dict(lead_id="lead_009", name="Lahori Karahi House", cuisine_type="Pakistani",
          area="Bur Dubai", estimated_monthly_orders=650, avg_ticket_aed=38,
-         google_rating=4.2, num_reviews=1456, has_delivery=True, current_platform="Zomato",
+         google_rating=4.2, num_reviews=1456, has_delivery=True, current_platform="Keeta, Noon Food",
          owner_name="Zafar Iqbal", owner_phone="+971509234569", owner_email="zafar@lahorikarahi.ae",
-         notes="24-hour restaurant. High late-night volume. Zomato order quality inconsistent."),
+         notes="24-hour restaurant. High late-night volume. On both Keeta and Noon Food but order quality inconsistent. Owner open to switching primary platform."),
 
     dict(lead_id="lead_010", name="Al Bait Al Qadim", cuisine_type="Emirati",
          area="Deira", estimated_monthly_orders=210, avg_ticket_aed=95,
@@ -107,9 +107,9 @@ _LEADS_RAW = [
     # Scattered areas — value segment
     dict(lead_id="lead_016", name="Taste of Manila", cuisine_type="Filipino",
          area="Discovery Gardens", estimated_monthly_orders=510, avg_ticket_aed=35,
-         google_rating=4.6, num_reviews=892, has_delivery=True, current_platform="Zomato",
+         google_rating=4.6, num_reviews=892, has_delivery=True, current_platform="Careem Food, Deliveroo",
          owner_name="Maria Santos", owner_phone="+971516234576", owner_email="maria@tasteofmanila.ae",
-         notes="Huge Filipino expat community nearby. Zomato coverage inconsistent in this area."),
+         notes="Huge Filipino expat community nearby. On Careem Food and Deliveroo but neither has strong coverage in Discovery Gardens. Wants better reach."),
 
     dict(lead_id="lead_017", name="Naan Stop Curry", cuisine_type="Indian",
          area="Silicon Oasis", estimated_monthly_orders=430, avg_ticket_aed=40,
@@ -358,14 +358,32 @@ COMPETITOR_DATA = {
         "weaknesses": ["High commission (30% vs talabat's 15-18%)", "Limited UAE market coverage", "No Arabic interface", "Poor customer support response times"],
         "talabat_advantages": ["Lower commission", "Larger UAE customer base", "Arabic-first platform", "Dedicated account manager", "Free launch promotions"],
     },
-    "Zomato": {
+    "Noon Food": {
+        "commission_pct": 20,
+        "platform_fee_aed": 0,
+        "avg_delivery_time_min": 42,
+        "analytics_dashboard": "Basic",
+        "marketing_support": "Noon-app cross-promotions only",
+        "weaknesses": ["Smaller food-delivery customer base vs talabat", "Primarily known as e-commerce — less food discovery intent", "Limited restaurant density outside central Dubai", "Weaker delivery logistics network"],
+        "talabat_advantages": ["5x larger active food-delivery customer base in UAE", "Food-first platform — higher intent and repeat order rates", "Superior delivery SLA and logistics coverage", "Dedicated restaurant success team", "Exclusive Ramadan and National Day campaigns"],
+    },
+    "Careem Food": {
         "commission_pct": 22,
         "platform_fee_aed": 0,
-        "avg_delivery_time_min": 40,
+        "avg_delivery_time_min": 38,
         "analytics_dashboard": "Basic",
-        "marketing_support": "Limited",
-        "weaknesses": ["Smaller UAE customer base vs talabat", "Less brand trust in UAE", "Inconsistent delivery coverage", "Limited corporate ordering features"],
-        "talabat_advantages": ["3x larger customer base in UAE", "Superior delivery logistics", "Corporate/B2B ordering platform", "Better analytics and insights", "Exclusive promotions on Ramadan/UAE events"],
+        "marketing_support": "Limited to Careem Super App",
+        "weaknesses": ["Food ordering is secondary to ride-hailing on Careem app", "Lower food discovery and browse behaviour", "Smaller restaurant catalogue vs talabat", "Less localised UAE food content and curation"],
+        "talabat_advantages": ["Largest restaurant catalogue in UAE", "Food-native platform — customers open talabat specifically to order food", "8M+ UAE users vs Careem Food's smaller food-ordering subset", "Better merchant analytics and reporting", "Free professional menu photography"],
+    },
+    "Keeta": {
+        "commission_pct": 18,
+        "platform_fee_aed": 0,
+        "avg_delivery_time_min": 30,
+        "analytics_dashboard": "Moderate",
+        "marketing_support": "Aggressive subsidy campaigns (unsustainable)",
+        "weaknesses": ["Relatively new to UAE — limited brand trust and customer base", "Heavy reliance on subsidies to drive orders — volume may drop", "Limited coverage outside central Dubai", "Uncertain long-term market commitment"],
+        "talabat_advantages": ["Established UAE brand with 15+ years of trust", "Stable, sustainable order volume without artificial subsidies", "Pan-UAE coverage including suburbs and emerging areas", "Stronger corporate and B2B ordering channel", "Local team with deep UAE market expertise"],
     },
     None: {
         "commission_pct": 0,

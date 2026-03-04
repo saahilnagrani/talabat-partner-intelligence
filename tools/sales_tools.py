@@ -75,7 +75,9 @@ def get_market_benchmarks(area: str, cuisine_type: str) -> dict:
 
 def get_competitor_analysis(current_platform: str) -> dict:
     """Return talabat's competitive advantages vs the restaurant's current platform."""
-    competitor = COMPETITOR_DATA.get(current_platform, COMPETITOR_DATA[None])
+    # Use primary platform only (handles comma-separated multi-platform like "Keeta, Noon Food")
+    primary = current_platform.split(",")[0].strip() if current_platform and current_platform != "None" else None
+    competitor = COMPETITOR_DATA.get(primary, COMPETITOR_DATA[None])
     return {
         "current_platform": current_platform or "None (no delivery)",
         "their_commission_pct": competitor["commission_pct"],
@@ -250,8 +252,8 @@ SALES_TOOL_SCHEMAS = [
             "properties": {
                 "current_platform": {
                     "type": "string",
-                    "description": "Current platform: 'Deliveroo', 'Zomato', or null/None if no platform",
-                    "enum": ["Deliveroo", "Zomato", "None"],
+                    "description": "Primary current platform. Use the first/primary one if the restaurant is on multiple. Pass 'None' if no platform.",
+                    "enum": ["Deliveroo", "Noon Food", "Careem Food", "Keeta", "None"],
                 },
             },
             "required": ["current_platform"],
