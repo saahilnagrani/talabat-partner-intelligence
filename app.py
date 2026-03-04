@@ -77,8 +77,9 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.7 — Changelog", expanded=False):
+    with st.expander("📋 v2.8 — Changelog", expanded=False):
         st.markdown(
+            "**v2.8** — Filters locked during Quick Outreach generation · Supabase errors surfaced in UI\n\n"
             "**v2.7** — Realistic menu data for new partners · Blockers vs warnings split in onboarding\n\n"
             "**v2.6** — Restored sidebar toggle & GitHub icon\n\n"
             "**v2.5** — Transparent header (no Streamlit branding)\n\n"
