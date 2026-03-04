@@ -17,6 +17,15 @@ import streamlit as st
 from supabase import create_client, Client
 
 
+def _set_error(msg: str) -> None:
+    """Store a Supabase error message in session state so the UI can surface it."""
+    st.session_state["_supabase_error"] = msg
+
+
+def _clear_error() -> None:
+    st.session_state.pop("_supabase_error", None)
+
+
 @st.cache_resource
 def _get_client() -> Client:
     """Return a singleton Supabase client (cached for the lifetime of the server process)."""
@@ -27,11 +36,7 @@ def _get_client() -> Client:
 
 
 def load_history(user_id: str) -> list[dict]:
-    """Fetch all email history rows for *user_id*, newest first.
-
-    Returns a list of dicts with keys: email (dict), timestamp (datetime), source (str).
-    Returns [] on any error so the app degrades gracefully.
-    """
+    """Fetch all email history rows for *user_id*, newest first."""
     try:
         res = (
             _get_client()
@@ -42,6 +47,7 @@ def load_history(user_id: str) -> list[dict]:
             .execute()
         )
         rows = res.data or []
+        _clear_error()
         return [
             {
                 "email": r["email_data"],
@@ -50,12 +56,13 @@ def load_history(user_id: str) -> list[dict]:
             }
             for r in rows
         ]
-    except Exception:
+    except Exception as e:
+        _set_error(f"load_history failed: {e}")
         return []
 
 
 def save_email(user_id: str, email: dict, source: str, timestamp: datetime) -> None:
-    """Insert one generated email into Supabase. Fails silently (demo app)."""
+    """Insert one generated email into Supabase."""
     try:
         _get_client().table("email_history").insert(
             {
@@ -65,13 +72,15 @@ def save_email(user_id: str, email: dict, source: str, timestamp: datetime) -> N
                 "source": source,
             }
         ).execute()
-    except Exception:
-        pass
+        _clear_error()
+    except Exception as e:
+        _set_error(f"save_email failed: {e}")
 
 
 def clear_history(user_id: str) -> None:
-    """Delete all email history rows for *user_id*. Fails silently (demo app)."""
+    """Delete all email history rows for *user_id*."""
     try:
         _get_client().table("email_history").delete().eq("user_id", user_id).execute()
-    except Exception:
-        pass
+        _clear_error()
+    except Exception as e:
+        _set_error(f"clear_history failed: {e}")

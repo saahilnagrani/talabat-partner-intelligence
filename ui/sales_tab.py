@@ -312,6 +312,11 @@ def render():
     user_id = get_current_user()  # guaranteed non-None (login gate in app.py)
     _ensure_history_loaded(user_id)
 
+    # Surface any Supabase errors so they're visible for debugging
+    supabase_err = st.session_state.get("_supabase_error")
+    if supabase_err:
+        st.warning(f"⚠️ **Supabase error** (history may not persist): `{supabase_err}`")
+
     st.markdown(
         "### 🎯 Sales Acquisition Agent\n"
         "Scores restaurant leads, selects top prospects, and writes personalised outreach emails. "
