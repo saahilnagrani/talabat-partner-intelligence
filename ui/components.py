@@ -126,11 +126,9 @@ def inject_css():
                 color: {TALABAT_DARK};
             }}
 
-            /* Hide streamlit branding elements but keep the header bar (sidebar toggle lives there) */
+            /* Hide only the hamburger rerun/settings menu and footer branding */
             #MainMenu {{visibility: hidden;}}
             footer {{visibility: hidden;}}
-            [data-testid="stToolbar"] {{visibility: hidden;}}
-            [data-testid="stDecoration"] {{display: none;}}
             [data-testid="stHeader"] {{
                 background: transparent !important;
                 border-bottom: none !important;
