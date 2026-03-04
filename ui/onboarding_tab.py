@@ -117,10 +117,15 @@ def render():
         col1.info(f"👤 **Success Manager:** {onboarding_plan.get('assigned_success_manager', 'TBD')}")
         col2.success(f"🎁 **Launch Promo:** {onboarding_plan.get('first_promo_recommendation', 'TBD')}")
 
-        # Blockers
+        # Blockers — hard stops
         blockers = onboarding_plan.get("menu_blockers", [])
         if blockers:
-            st.warning("**⚠️ Menu Blockers (resolve before go-live):**\n" + "\n".join(f"- {b}" for b in blockers))
+            st.warning("**🔴 Menu Blockers — must resolve before go-live:**\n" + "\n".join(f"- {b}" for b in blockers))
+
+        # Warnings — important but not blocking
+        warnings = onboarding_plan.get("menu_warnings", [])
+        if warnings:
+            st.info("**⚠️ Additional Issues (not blocking, but important):**\n" + "\n".join(f"- {w}" for w in warnings))
 
         # Timeline
         st.divider()

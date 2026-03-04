@@ -51,6 +51,33 @@ PROMO_TEMPLATES = {
     },
 }
 
+MENU_DATA = {
+    # Golden Spoon Kitchen — Indian, JLT — rushed start, several gaps
+    "partner_001": {
+        "items_uploaded": 8,
+        "photos_uploaded": 4,           # 4 of 8 items have photos
+        "pricing_gaps": 3,              # 3 items with no price set
+        "missing_categories": ["Beverages", "Desserts", "Snacks"],
+        "halal_cert_submitted": False,  # Not submitted yet
+    },
+    # Beirut Bites — Lebanese, Al Barsha — decent start, a few gaps
+    "partner_002": {
+        "items_uploaded": 15,
+        "photos_uploaded": 11,          # 4 missing photos
+        "pricing_gaps": 2,
+        "missing_categories": ["Beverages"],
+        "halal_cert_submitted": False,  # Still pending
+    },
+    # Wok This Way — Chinese, Deira — most complete, submitted halal cert proactively
+    "partner_003": {
+        "items_uploaded": 22,
+        "photos_uploaded": 20,          # 2 missing photos
+        "pricing_gaps": 0,              # All pricing complete
+        "missing_categories": [],
+        "halal_cert_submitted": True,
+    },
+}
+
 CUISINE_COMPLEXITY = {
     "Italian": "medium", "Japanese": "high", "Indian": "low", "Pakistani": "low",
     "Lebanese": "low", "Filipino": "low", "American": "low", "Thai": "medium",
@@ -100,34 +127,81 @@ def get_onboarding_template(cuisine_type: str, area: str) -> dict:
 
 
 def check_menu_readiness(partner_id: str) -> dict:
-    """Simulate a menu readiness check for a new partner."""
+    """Check menu readiness for a new partner, using per-partner data where available."""
     partner = get_partner_by_id(partner_id)
     if not partner:
         return {"error": f"Partner {partner_id} not found"}
 
-    items = partner.active_menu_items
-    photos_complete = max(0, items - 3)
-    pricing_gaps = 2 if items < 15 else 0
-    missing_categories = []
+    # Use per-partner menu data if available; fall back to derived estimate for others
+    m = MENU_DATA.get(partner_id)
+    if m:
+        items              = m["items_uploaded"]
+        photos_complete    = m["photos_uploaded"]
+        pricing_gaps       = m["pricing_gaps"]
+        missing_categories = m["missing_categories"]
+        halal_submitted    = m["halal_cert_submitted"]
+    else:
+        items              = partner.active_menu_items
+        photos_complete    = max(0, items - 3)
+        pricing_gaps       = 2 if items < 15 else 0
+        missing_categories = (
+            ["Beverages", "Desserts"] if items < 10 else
+            ["Beverages"] if items < 20 else []
+        )
+        halal_submitted    = True  # assume existing partners are already compliant
+
+    missing_photos  = items - photos_complete
+    readiness_score = min(100, int((items / 20) * 60 + (photos_complete / max(items, 1)) * 40))
+
+    blockers = []   # hard stops — must be resolved before go-live
+    warnings = []   # important but not blocking
+
+    # --- BLOCKERS ---
     if items < 10:
-        missing_categories = ["Beverages", "Desserts"]
-    elif items < 20:
-        missing_categories = ["Beverages"]
+        blockers.append(
+            "Fewer than 10 menu items — customers expect at least 10+ options before go-live"
+        )
+    if pricing_gaps > 0:
+        blockers.append(
+            f"{pricing_gaps} pricing gap{'s' if pricing_gaps > 1 else ''} detected "
+            "— all pricing must be complete before QA approval"
+        )
+    if not halal_submitted:
+        blockers.append(
+            f"Halal certification not submitted — required for {partner.cuisine_type} "
+            "cuisine in UAE and must be uploaded on Day 1"
+        )
+
+    # --- WARNINGS (not blocking) ---
+    if missing_photos > 0:
+        warnings.append(
+            f"{missing_photos} item{'s' if missing_photos > 1 else ''} missing photos "
+            "— photos increase conversion by 25%, add before go-live if possible"
+        )
+    if missing_categories:
+        cats = " and ".join(missing_categories)
+        warnings.append(
+            f"Missing menu categories: {cats} — recommended to populate before go-live"
+        )
+
+    recommendation = (
+        "Critical gaps must be resolved before go-live — see blockers above."
+        if blockers else
+        "Menu is nearly ready — add missing photos to maximise conversion."
+    )
 
     return {
         "partner_id": partner_id,
         "menu_items_uploaded": items,
         "menu_items_with_photos": photos_complete,
-        "menu_items_missing_photos": items - photos_complete,
+        "menu_items_missing_photos": missing_photos,
         "pricing_gaps": pricing_gaps,
         "missing_categories": missing_categories,
-        "readiness_score_pct": min(100, int((items / 20) * 60 + (photos_complete / max(items, 1)) * 40)),
-        "blockers": (
-            ["Fewer than 10 menu items — customers expect at least 10+ options"] if items < 10 else []
-        ) + (
-            [f"{items - photos_complete} items missing photos — photos increase conversion by 25%"] if items > photos_complete else []
-        ),
-        "recommendation": "Add at least 3 photos and fill Beverages section before go-live" if items < 15 else "Menu is nearly ready — add missing photos to maximise conversion",
+        "halal_cert_submitted": halal_submitted,
+        "readiness_score_pct": readiness_score,
+        "blockers": blockers,
+        "warnings": warnings,
+        "recommendation": recommendation,
     }
 
 
@@ -326,6 +400,7 @@ def build_onboarding_plan(partner_id: str, all_data: dict) -> dict:
         "expected_day_7_orders": demand.get("forecasted_day_7_orders", 35),
         "expected_30d_gmv_aed": demand.get("forecasted_30d_gmv_aed", 15000),
         "menu_blockers": menu.get("blockers", []),
+        "menu_warnings": menu.get("warnings", []),
     }
 
 
