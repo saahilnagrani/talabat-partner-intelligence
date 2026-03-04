@@ -2,7 +2,8 @@
 Tab 1: Sales Acquisition Agent UI.
 """
 import streamlit as st
-from data.seed import MARKET_BENCHMARKS
+import pandas as pd
+from data.seed import MARKET_BENCHMARKS, get_leads
 from agents.sales_agent import run_sales_agent
 from ui.components import (
     render_thinking_box,
@@ -48,7 +49,34 @@ def render():
     area_filter = ", ".join(selected_areas) if selected_areas else "all"
     cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
 
-    run_btn = st.button("🚀 Run Sales Agent", use_container_width=True, key="run_sales")
+    # Live leads preview table
+    all_leads = get_leads()
+    filtered = [
+        l for l in all_leads
+        if (not selected_areas or l.area in selected_areas)
+        and (not selected_cuisines or l.cuisine_type in selected_cuisines)
+    ]
+
+    st.markdown(f"**{len(filtered)} lead{'s' if len(filtered) != 1 else ''} matching filters**")
+    if filtered:
+        df_preview = pd.DataFrame([
+            {
+                "Restaurant": l.name,
+                "Area": l.area,
+                "Cuisine": l.cuisine_type,
+                "Est. Orders/mo": l.estimated_monthly_orders,
+                "Avg Ticket (AED)": l.avg_ticket_aed,
+                "Rating": l.google_rating,
+                "Reviews": l.num_reviews,
+                "Platform": l.current_platform or "—",
+            }
+            for l in sorted(filtered, key=lambda x: x.estimated_monthly_orders, reverse=True)
+        ])
+        st.dataframe(df_preview, use_container_width=True, hide_index=True)
+    else:
+        st.warning("No leads match the current filters.")
+
+    run_btn = st.button("🚀 Run Sales Agent", use_container_width=True, key="run_sales", disabled=not filtered)
 
     if not run_btn:
         st.info("Configure your filters above and click **Run Sales Agent** to start.")
@@ -119,7 +147,6 @@ def render():
     if collected_scores:
         st.divider()
         st.markdown("#### Lead Scores")
-        import pandas as pd
         df = pd.DataFrame([
             {
                 "Restaurant": s.get("restaurant_name", s.get("lead_id")),
