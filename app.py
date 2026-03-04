@@ -71,6 +71,7 @@ AI agent analyses 5 health signals, identifies root causes, and generates specif
     st.divider()
     st.markdown("**Model:** `claude-sonnet-4-6`")
     st.markdown("**Pattern:** Tool-use agentic loop")
+    st.markdown("**v2.1** — Quick Outreach · Email History · Gmail/Outlook")
 
 # ---------------------------------------------------------------------------
 # Main content
