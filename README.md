@@ -2,7 +2,7 @@
 
 > An AI-powered B2B partner management platform built to showcase the core workflows of talabat's **Senior PM - AI** role.
 
-**[Live Demo →](https://talabat-partner-intelligence.streamlit.app)**
+**[Live Demo →](https://talabat-partner-intelligence.streamlit.app/)**
 
 ---
 
@@ -55,7 +55,7 @@ Streamlit UI  →  Agent Runner (base_agent.py)  →  Claude Sonnet API
 
 ```bash
 # 1. Clone and install dependencies
-git clone https://github.com/saahilnagrani/talabat-partner-intelligence.git
+git clone https://github.com/saahilnagrani/talabat-partner-intelligence
 cd talabat-partner-intelligence
 pip install -r requirements.txt
 
