@@ -22,9 +22,34 @@ inject_css()
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("## ⚙️ Configuration")
+    # 1. About
+    st.markdown("## 📖 About This Tool")
+    st.markdown(
+        "This demo showcases an AI-powered **B2B Partner Intelligence Platform** for talabat, "
+        "reflecting the core responsibilities of the **Senior PM - AI** role:\n\n"
+        "🎯 **Sales Acquisition** — scores leads, writes personalised outreach\n\n"
+        "📋 **Partner Onboarding** — builds milestone-based onboarding plans\n\n"
+        "🛡️ **Retention** — analyses churn signals and generates interventions"
+    )
 
-    # API key input (fallback if not in environment / secrets)
+    # 2. Built with
+    st.divider()
+    st.markdown("**Built with:**")
+    st.markdown(
+        "- Claude Sonnet (Anthropic)\n"
+        "- Streamlit\n"
+        "- Python tool_use API (agentic loop)"
+    )
+    st.caption("*All restaurant data is simulated for demo purposes.*")
+
+    # 3+4. Model / Pattern
+    st.divider()
+    st.markdown("**Model:** `claude-sonnet-4-6`")
+    st.markdown("**Pattern:** Tool-use agentic loop")
+
+    # 5. Configuration
+    st.divider()
+    st.markdown("## ⚙️ Configuration")
     env_key = get_api_key()
     if env_key:
         st.success("✅ API key loaded")
@@ -40,38 +65,9 @@ with st.sidebar:
             import os
             os.environ["ANTHROPIC_API_KEY"] = api_key
 
+    # 6. Version
     st.divider()
-
-    st.markdown("## 📖 About This Demo")
-    st.markdown(
-        """
-This demo was built to showcase an AI-powered **B2B Partner Intelligence Platform** for talabat.
-
-It directly reflects the core responsibilities of the **Senior PM - AI** role:
-
-🎯 **Sales Acquisition**
-AI agent scores restaurant leads and writes personalised outreach using market benchmarks and competitive data.
-
-📋 **Partner Onboarding**
-AI agent generates milestone-based onboarding plans tailored to cuisine type, area, and menu readiness.
-
-🛡️ **Retention & Churn Prevention**
-AI agent analyses 5 health signals, identifies root causes, and generates specific intervention plans.
-
----
-**Built with:**
-- Claude Sonnet (Anthropic)
-- Streamlit
-- Python tool_use API (agentic loop)
-
-*All restaurant data is simulated for demo purposes.*
-        """
-    )
-
-    st.divider()
-    st.markdown("**Model:** `claude-sonnet-4-6`")
-    st.markdown("**Pattern:** Tool-use agentic loop")
-    st.markdown("**v2.1** — Quick Outreach · Email History · Gmail/Outlook")
+    st.caption("v2.1 — Quick Outreach · Email History · Gmail/Outlook")
 
 # ---------------------------------------------------------------------------
 # Main content

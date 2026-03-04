@@ -87,9 +87,14 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
 
     return f"""
     <style>
+      body {{
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif;
+        margin: 0;
+      }}
       .leads-tbl {{
         width:100%; border-collapse:collapse;
-        font-size:0.85em; color:#e0e0e0;
+        font-size:0.9em; color:#e0e0e0;
+        font-family: inherit;
       }}
       .leads-tbl th {{
         background:#2a2a2a; color:#aaa; font-weight:600;
@@ -116,6 +121,7 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
         box-shadow:0 6px 20px rgba(0,0,0,0.7); font-size:0.88em;
       }}
       .score-tip.open {{ display:block; }}
+      .score-tip.above {{ top:auto; bottom:calc(100% + 2px); }}
       .tt-row {{
         display:flex; justify-content:space-between; gap:20px;
         padding:3px 0; color:#bbb;
@@ -159,13 +165,23 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
       function toggleTip(btn) {{
         var tip = btn.nextElementSibling;
         var wasOpen = tip.classList.contains('open');
-        document.querySelectorAll('.score-tip.open').forEach(function(e) {{ e.classList.remove('open'); }});
+        document.querySelectorAll('.score-tip.open').forEach(function(e) {{
+          e.classList.remove('open');
+          e.classList.remove('above');
+        }});
         if (!wasOpen) {{
           tip.classList.add('open');
+          // Flip upward if tooltip overflows below the viewport
+          var rect = tip.getBoundingClientRect();
+          var vh = window.innerHeight || document.documentElement.clientHeight;
+          if (rect.bottom > vh) {{
+            tip.classList.add('above');
+          }}
           setTimeout(function() {{
             document.addEventListener('click', function close(e) {{
               if (!tip.contains(e.target) && e.target !== btn) {{
                 tip.classList.remove('open');
+                tip.classList.remove('above');
                 document.removeEventListener('click', close);
               }}
             }});

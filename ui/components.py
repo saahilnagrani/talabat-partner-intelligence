@@ -129,6 +129,33 @@ def inject_css():
             /* Hide streamlit branding */
             #MainMenu {{visibility: hidden;}}
             footer {{visibility: hidden;}}
+
+            /* Reduce default top whitespace */
+            .stMainBlockContainer {{
+                padding-top: 1.5rem !important;
+            }}
+            [data-testid="stHeader"] {{
+                height: 0 !important;
+                min-height: 0 !important;
+            }}
+
+            /* Full-width tabs with larger font */
+            .stTabs [data-baseweb="tab-list"] {{
+                gap: 0px;
+                border-bottom: 2px solid {TALABAT_ORANGE};
+            }}
+            .stTabs [data-baseweb="tab"] {{
+                flex: 1;
+                justify-content: center;
+                font-size: 1rem;
+                font-weight: 600;
+                padding: 0.6rem 1rem;
+                border-radius: 0;
+            }}
+            .stTabs [aria-selected="true"] {{
+                color: {TALABAT_ORANGE} !important;
+                border-bottom: 3px solid {TALABAT_ORANGE} !important;
+            }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -140,13 +167,13 @@ def render_header():
     col1, col2 = st.columns([3, 1])
     with col1:
         st.markdown(
-            f'<h1 style="color:{TALABAT_ORANGE}; margin-bottom:0;">🍔 talabat</h1>'
-            '<p style="color:#666; margin-top:0; font-size:1.1em;">Partner Intelligence — AI Agent Demo</p>',
+            f'<h2 style="color:{TALABAT_ORANGE}; margin:0 0 4px 0; font-size:1.75em; font-weight:700;">'
+            f'🍔 talabat Partner Intelligence</h2>',
             unsafe_allow_html=True,
         )
     with col2:
         st.markdown(
-            '<p style="text-align:right; color:#999; font-size:0.8em; margin-top:20px;">'
+            '<p style="text-align:right; color:#999; font-size:0.8em; margin-top:10px;">'
             'Powered by Claude Sonnet</p>',
             unsafe_allow_html=True,
         )
