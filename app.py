@@ -77,7 +77,7 @@ with st.sidebar:
 
     # 7. Version
     st.divider()
-    st.caption("v2.3 — Login · Persistent History · Gmail/Outlook")
+    st.caption("v2.4 — Login · Persistent History · Gmail/Outlook")
 
 # ---------------------------------------------------------------------------
 # Main content

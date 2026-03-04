@@ -130,13 +130,12 @@ def inject_css():
             #MainMenu {{visibility: hidden;}}
             footer {{visibility: hidden;}}
 
-            /* Reduce default top whitespace without clipping the header */
-            .stMainBlockContainer {{
-                padding-top: 2.5rem !important;
-            }}
+            /* Hide Streamlit toolbar completely and reclaim the space */
             [data-testid="stHeader"] {{
-                height: 0 !important;
-                min-height: 0 !important;
+                display: none !important;
+            }}
+            .stMainBlockContainer {{
+                padding-top: 2rem !important;
             }}
 
             /* Full-width tabs with larger font */
