@@ -126,16 +126,14 @@ def inject_css():
                 color: {TALABAT_DARK};
             }}
 
-            /* Hide streamlit branding */
+            /* Hide streamlit branding elements but keep the header bar (sidebar toggle lives there) */
             #MainMenu {{visibility: hidden;}}
             footer {{visibility: hidden;}}
-
-            /* Hide Streamlit toolbar completely and reclaim the space */
+            [data-testid="stToolbar"] {{visibility: hidden;}}
+            [data-testid="stDecoration"] {{display: none;}}
             [data-testid="stHeader"] {{
-                display: none !important;
-            }}
-            .stMainBlockContainer {{
-                padding-top: 2rem !important;
+                background: transparent !important;
+                border-bottom: none !important;
             }}
 
             /* Full-width tabs with larger font */
