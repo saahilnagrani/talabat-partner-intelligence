@@ -28,10 +28,11 @@ from streamlit_cookies_controller import CookieController
 _COOKIE_KEY = "tpi_user"
 
 
-@st.cache_resource
 def _cookie_controller() -> CookieController:
-    """Singleton CookieController (one per server process)."""
-    return CookieController()
+    """Session-scoped CookieController (session_state avoids widget-in-cache error)."""
+    if "_tpi_cc" not in st.session_state:
+        st.session_state["_tpi_cc"] = CookieController()
+    return st.session_state["_tpi_cc"]
 
 
 def get_current_user() -> str | None:
