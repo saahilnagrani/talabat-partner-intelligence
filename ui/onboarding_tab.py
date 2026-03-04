@@ -213,6 +213,10 @@ def render():
     user_id = get_current_user()
     _ensure_plans_loaded(user_id)
 
+    # Bug 3 fix: surface Supabase errors in the onboarding tab
+    if supabase_err := st.session_state.get("_supabase_error"):
+        st.warning(f"⚠️ Supabase error (history may not persist): {supabase_err}")
+
     st.markdown(
         "### 📋 Onboarding Agent\n"
         "Generates a personalised milestone-based onboarding plan for a new restaurant partner, "
@@ -237,19 +241,11 @@ def render():
         cols = st.columns(4)
         cols[0].metric("Menu Items", selected_partner.active_menu_items)
         cols[1].metric("Cuisine", selected_partner.cuisine_type)
-        cols[2].metric("Area", selected_partner.area)
+        # Bug 5 fix: show full area name on hover instead of truncating
+        cols[2].metric("Area", selected_partner.area, help=selected_partner.area)
         cols[3].metric("Current Orders/mo", selected_partner.monthly_orders)
 
-    run_btn = st.button("📋 Generate Onboarding Plan", use_container_width=True, key="run_onboarding")
-
-    if not run_btn:
-        st.info("Select a partner above and click **Generate Onboarding Plan** to start.")
-        _render_plan_history(user_id)
-        return
-
-    # -----------------------------------------------------------------------
-    # Reasoning panel toggle
-    # -----------------------------------------------------------------------
+    # Bug 2 fix: reasoning toggle lives outside the run_btn guard so it persists across reruns
     show_r = st.session_state.get("_show_reasoning", False)
     _, toggle_col = st.columns([5, 1])
     if toggle_col.button(
@@ -260,6 +256,16 @@ def render():
         st.session_state["_show_reasoning"] = not show_r
         st.rerun()
 
+    run_btn = st.button("📋 Generate Onboarding Plan", use_container_width=True, key="run_onboarding")
+
+    if not run_btn:
+        st.info("Select a partner above and click **Generate Onboarding Plan** to start.")
+        _render_plan_history(user_id)
+        return
+
+    # -----------------------------------------------------------------------
+    # Layout: split or full-width depending on reasoning panel state
+    # -----------------------------------------------------------------------
     if show_r:
         col_main, col_panel = st.columns([3, 1])
     else:
@@ -271,17 +277,27 @@ def render():
     # -----------------------------------------------------------------------
     reasoning_target = col_panel if col_panel else st.container()
 
-    with reasoning_target:
-        if show_r:
-            st.markdown("**🧠 Agent Reasoning**")
-        else:
-            st.divider()
-            st.markdown("#### Agent Reasoning")
-        thinking_placeholder = st.empty()
-        thinking_text = ""
-        if not show_r:
-            st.markdown("#### Tool Calls")
-        tool_area = st.container()
+    # Bug 6 fix: defer headers until the agent actually starts emitting events
+    thinking_placeholder = None
+    thinking_text = ""
+    tool_area = None
+    headers_rendered = False
+
+    def _ensure_headers():
+        nonlocal thinking_placeholder, tool_area, headers_rendered
+        if headers_rendered:
+            return
+        headers_rendered = True
+        with reasoning_target:
+            if show_r:
+                st.markdown("**🧠 Agent Reasoning**")
+            else:
+                st.divider()
+                st.markdown("#### Agent Reasoning")
+            thinking_placeholder = st.empty()
+            if not show_r:
+                st.markdown("#### Tool Calls")
+            tool_area = st.container()
 
     pending_calls: dict[str, dict] = {}
     onboarding_plan: dict | None = None
@@ -289,6 +305,7 @@ def render():
     with st.spinner("Building onboarding plan…"):
         for event in run_onboarding_agent(partner_id=partner_id):
             if event.type == "thinking":
+                _ensure_headers()
                 thinking_text += event.data
                 thinking_placeholder.markdown(
                     render_thinking_box(thinking_text),
@@ -296,6 +313,7 @@ def render():
                 )
 
             elif event.type == "tool_call":
+                _ensure_headers()
                 tid = event.data.get("tool_use_id", "")
                 pending_calls[tid] = {
                     "name": event.data["name"],
@@ -303,6 +321,7 @@ def render():
                 }
 
             elif event.type == "tool_result":
+                _ensure_headers()
                 tid = event.data.get("tool_use_id", "")
                 result = event.data.get("result", {})
                 name = event.data["name"]

@@ -1,6 +1,7 @@
 """
 Tab 1: Sales Acquisition Agent UI.
 """
+from __future__ import annotations
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components

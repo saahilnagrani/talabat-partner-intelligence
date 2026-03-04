@@ -211,7 +211,7 @@ def render_score_badge(score: float) -> str:
         color = "#ffc107"
     else:
         color = "#dc3545"
-    return f'<span style="background:{color};color:{"white" if score < 75 or score >= 55 else "#1a1a1a"};padding:3px 10px;border-radius:12px;font-size:0.78em;font-weight:600;">{score:.0f}/100</span>'
+    return f'<span style="background:{color};color:{"white" if score >= 75 or score < 55 else "#1a1a1a"};padding:3px 10px;border-radius:12px;font-size:0.78em;font-weight:600;">{score:.0f}/100</span>'
 
 
 def render_email_card(email: dict, key_suffix: str = ""):
