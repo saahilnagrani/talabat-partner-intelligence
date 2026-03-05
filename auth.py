@@ -57,9 +57,13 @@ def get_current_user() -> str | None:
         _cookie_controller()  # initialise so the JS injection fires
         st.rerun()            # one extra render cycle for JS to hydrate
 
-    # Cookie path — restore from a previous session / page refresh
+    # Cookie path — call refresh() so the controller re-fetches the JS
+    # component value that arrived after the rerun (the initial get() call
+    # on render 1 returned {} before JS had a chance to respond).
     try:
-        saved = _cookie_controller().get(_COOKIE_KEY)
+        cc = _cookie_controller()
+        cc.refresh()  # pull the updated cookie dict from the JS component
+        saved = cc.get(_COOKIE_KEY)
         if saved:
             st.session_state["logged_in_user"] = saved
             return saved
