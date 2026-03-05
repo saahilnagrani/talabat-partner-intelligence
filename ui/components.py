@@ -123,7 +123,6 @@ def inject_css():
                 margin-bottom: 16px;
                 font-size: 1.1em;
                 font-weight: 700;
-                color: {TALABAT_DARK};
             }}
 
             /* Hide only the hamburger rerun/settings menu and footer branding */
@@ -142,7 +141,7 @@ def inject_css():
             .stTabs [data-baseweb="tab"] {{
                 flex: 1;
                 justify-content: center;
-                font-size: 1rem;
+                font-size: 1.2rem;
                 font-weight: 600;
                 padding: 0.6rem 1rem;
                 border-radius: 0;

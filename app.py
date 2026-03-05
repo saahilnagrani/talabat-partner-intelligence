@@ -77,8 +77,16 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.10 — Changelog", expanded=False):
+    with st.expander("📋 v2.11 — Changelog", expanded=False):
         st.markdown(
+            "**v2.11** — Login now persists across page refresh (cookie hydration fix) · "
+            "Agent reasoning always renders in right sidebar (onboarding + sales) · "
+            "Onboarding timeline text visible on dark theme · "
+            "PDF export unicode crash fixed (em-dash + smart quotes) · PDF button always visible in history · "
+            "Export buttons reordered: PDF first, JSON second · "
+            "Timeline: Photography >= Day 2, QA >= Day 3 · "
+            "New Go Live +7 milestone card · 30-Day Review now at Go Live +30 · "
+            "Tab font size increased\n\n"
             "**v2.10** — Fix Python 3.9 crash (str | None in dataclass) · Reasoning toggle now persists across reruns · "
             "Supabase errors surfaced in Onboarding tab · Area metric tooltip for long names · "
             "Agent Reasoning headers deferred until agent starts · Score badge text colour fixed for medium scores\n\n"

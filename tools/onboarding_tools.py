@@ -319,6 +319,11 @@ def build_onboarding_plan(partner_id: str, all_data: dict) -> dict:
     manager_info = all_data.get("manager", {})
     go_live_days = template.get("estimated_go_live_days", 7)
 
+    # Photography must happen after menu upload (Day 2+);
+    # QA must happen after photography and at least on Day 3.
+    photo_day = max(template.get("photography_days", 2), 2)
+    qa_day    = max(template.get("menu_setup_days", 3), photo_day + 1, 3)
+
     milestones = [
         {
             "day": 1,
@@ -342,14 +347,14 @@ def build_onboarding_plan(partner_id: str, all_data: dict) -> dict:
             "blocking": True,
         },
         {
-            "day": template.get("photography_days", 2),
+            "day": photo_day,
             "title": "Professional Menu Photography",
-            "description": "talabat photographer visits for complimentary food photography session. Items with photos convert 25% better.",
+            "description": f"talabat photographer visits Days {photo_day}-{photo_day + template.get('photography_days', 1) - 1} for complimentary food photography session. Items with photos convert 25% better.",
             "owner": "talabat",
             "blocking": False,
         },
         {
-            "day": template.get("menu_setup_days", 3),
+            "day": qa_day,
             "title": "Menu QA & Approval",
             "description": "talabat team reviews menu for completeness, pricing, and policy compliance. Final approval to go live.",
             "owner": "talabat",
@@ -377,7 +382,14 @@ def build_onboarding_plan(partner_id: str, all_data: dict) -> dict:
             "blocking": False,
         },
         {
-            "day": 30,
+            "day": go_live_days + 7,
+            "title": "Week 1 Performance Review",
+            "description": f"7-day post-launch review: order velocity vs forecast ({demand.get('forecasted_day_7_orders', 35)} target), customer rating analysis, promo effectiveness check.",
+            "owner": "talabat",
+            "blocking": False,
+        },
+        {
+            "day": go_live_days + 30,
             "title": "30-Day Business Review",
             "description": f"Full performance review: orders vs forecast ({demand.get('forecasted_day_30_orders', 150)} target), rating trend, GMV analysis. Plan month 2 strategy.",
             "owner": "both",

@@ -40,10 +40,22 @@ def get_current_user() -> str | None:
 
     Checks session state first (fast path), then falls back to the
     persisted cookie so users stay logged in after a page refresh.
+
+    streamlit-cookies-controller reads cookies asynchronously via JS
+    injection. On the very first render after a page refresh the cookie
+    value is not yet available, so we trigger one extra rerun to let JS
+    hydrate before reading.
     """
     # Fast path — already in this session
     if "logged_in_user" in st.session_state:
         return st.session_state["logged_in_user"]
+
+    # First time this session: initialise the controller and rerun once
+    # so the browser JS has a chance to load the cookie values.
+    if "_cookie_checked" not in st.session_state:
+        st.session_state["_cookie_checked"] = True
+        _cookie_controller()  # initialise so the JS injection fires
+        st.rerun()            # one extra render cycle for JS to hydrate
 
     # Cookie path — restore from a previous session / page refresh
     try:
@@ -52,7 +64,7 @@ def get_current_user() -> str | None:
             st.session_state["logged_in_user"] = saved
             return saved
     except Exception:
-        pass  # Cookie library not ready yet — will be set on next rerun
+        pass
 
     return None
 
@@ -101,6 +113,7 @@ def logout() -> None:
     except Exception:
         pass
     st.session_state.pop("logged_in_user", None)
+    st.session_state.pop("_cookie_checked", None)
     st.session_state.pop("email_history_cache", None)
     st.session_state.pop("onboarding_plan_cache", None)
     st.rerun()

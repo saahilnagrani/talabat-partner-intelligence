@@ -46,6 +46,21 @@ PROMO_OPTIONS: dict[str, str] = {
 # PDF export helper
 # ---------------------------------------------------------------------------
 
+def _safe_text(s: str) -> str:
+    """Replace Unicode characters unsupported by FPDF's built-in Latin-1 fonts."""
+    return (
+        str(s)
+        .replace("\u2014", "-")   # em dash —
+        .replace("\u2013", "-")   # en dash –
+        .replace("\u2019", "'")   # right single quotation mark '
+        .replace("\u2018", "'")   # left single quotation mark '
+        .replace("\u201c", '"')   # left double quotation mark "
+        .replace("\u201d", '"')   # right double quotation mark "
+        .replace("\u2022", "*")   # bullet •
+        .replace("\u00a0", " ")   # non-breaking space
+    )
+
+
 def _build_pdf(plan: dict) -> bytes:
     """Generate a clean PDF summary of the onboarding plan."""
     pdf = FPDF()
@@ -60,7 +75,7 @@ def _build_pdf(plan: dict) -> bytes:
     pdf.cell(0, 10, "talabat Partner Onboarding Plan", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(50, 50, 50)
-    pdf.cell(0, 6, plan.get("plan_title", ""), ln=True)
+    pdf.cell(0, 6, _safe_text(plan.get("plan_title", "")), ln=True)
     pdf.ln(4)
 
     # Key metrics
@@ -79,7 +94,7 @@ def _build_pdf(plan: dict) -> bytes:
     ]
     for label, value in metrics:
         pdf.cell(60, 6, f"{label}:", border=0)
-        pdf.cell(0, 6, value, ln=True)
+        pdf.cell(0, 6, _safe_text(value), ln=True)
     pdf.ln(4)
 
     # Blockers
@@ -91,7 +106,7 @@ def _build_pdf(plan: dict) -> bytes:
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(60, 60, 60)
         for b in blockers:
-            pdf.multi_cell(0, 6, f"  \u2022 {b}")
+            pdf.multi_cell(0, 6, _safe_text(f"  * {b}"))
         pdf.ln(2)
 
     # Warnings
@@ -103,7 +118,7 @@ def _build_pdf(plan: dict) -> bytes:
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(60, 60, 60)
         for w in warnings:
-            pdf.multi_cell(0, 6, f"  \u2022 {w}")
+            pdf.multi_cell(0, 6, _safe_text(f"  * {w}"))
         pdf.ln(2)
 
     # Milestone table
@@ -124,10 +139,10 @@ def _build_pdf(plan: dict) -> bytes:
     pdf.set_fill_color(250, 250, 250)
     for m in milestones:
         blocking = "Yes" if m.get("blocking") else ""
-        pdf.cell(15, 6, str(m.get("day", "")),                  border=1)
-        pdf.cell(30, 6, m.get("owner", "").capitalize(),         border=1)
-        pdf.cell(15, 6, blocking,                                border=1)
-        pdf.cell(0,  6, m.get("title", "")[:70],                 border=1, ln=True)
+        pdf.cell(15, 6, str(m.get("day", "")),                          border=1)
+        pdf.cell(30, 6, m.get("owner", "").capitalize(),                 border=1)
+        pdf.cell(15, 6, blocking,                                        border=1)
+        pdf.cell(0,  6, _safe_text(m.get("title", ""))[:70],            border=1, ln=True)
 
     return bytes(pdf.output())
 
@@ -186,23 +201,23 @@ def _render_plan_history(user_id: str) -> None:
                 mc[3].metric("30-Day GMV", f"AED {p.get('expected_30d_gmv_aed', 0):,.0f}")
                 render_onboarding_timeline(p)
                 dl1, dl2 = st.columns(2)
-                dl1.download_button(
-                    label="⬇️ Export as JSON",
-                    data=json.dumps(p, indent=2, default=str),
-                    file_name=f"onboarding_plan_{p.get('partner_id', 'plan')}.json",
-                    mime="application/json",
-                    key=f"dl_json_{key_ts}",
-                )
                 try:
-                    dl2.download_button(
+                    dl1.download_button(
                         label="⬇️ Export as PDF",
                         data=_build_pdf(p),
                         file_name=f"onboarding_plan_{p.get('partner_id', 'plan')}.pdf",
                         mime="application/pdf",
                         key=f"dl_pdf_{key_ts}",
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    dl1.warning(f"PDF unavailable: {e}")
+                dl2.download_button(
+                    label="⬇️ Export as JSON",
+                    data=json.dumps(p, indent=2, default=str),
+                    file_name=f"onboarding_plan_{p.get('partner_id', 'plan')}.json",
+                    mime="application/json",
+                    key=f"dl_json_{key_ts}",
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -264,20 +279,16 @@ def render():
         return
 
     # -----------------------------------------------------------------------
-    # Layout: split or full-width depending on reasoning panel state
+    # Layout: always split so reasoning goes to the right sidebar
     # -----------------------------------------------------------------------
-    if show_r:
-        col_main, col_panel = st.columns([3, 1])
-    else:
-        col_main = st.container()
-        col_panel = None
+    col_main, col_panel = st.columns([3, 1])
 
     # -----------------------------------------------------------------------
-    # Agent execution — reasoning renders in panel or inline
+    # Agent execution — reasoning always renders in right panel
     # -----------------------------------------------------------------------
-    reasoning_target = col_panel if col_panel else st.container()
+    reasoning_target = col_panel
 
-    # Bug 6 fix: defer headers until the agent actually starts emitting events
+    # Defer headers until the agent actually starts emitting events
     thinking_placeholder = None
     thinking_text = ""
     tool_area = None
@@ -289,14 +300,8 @@ def render():
             return
         headers_rendered = True
         with reasoning_target:
-            if show_r:
-                st.markdown("**🧠 Agent Reasoning**")
-            else:
-                st.divider()
-                st.markdown("#### Agent Reasoning")
+            st.markdown("**🧠 Agent Reasoning**")
             thinking_placeholder = st.empty()
-            if not show_r:
-                st.markdown("#### Tool Calls")
             tool_area = st.container()
 
     pending_calls: dict[str, dict] = {}
@@ -418,23 +423,23 @@ def render():
             unsafe_allow_html=True,
         )
 
-        # Export buttons
+        # Export buttons (PDF first, JSON second)
         st.divider()
         ex1, ex2 = st.columns(2)
-        ex1.download_button(
-            label="⬇️ Export Plan as JSON",
-            data=json.dumps(onboarding_plan, indent=2, default=str),
-            file_name=f"onboarding_plan_{partner_id}.json",
-            mime="application/json",
-        )
         try:
-            ex2.download_button(
+            ex1.download_button(
                 label="⬇️ Export Plan as PDF",
                 data=_build_pdf(onboarding_plan),
                 file_name=f"onboarding_plan_{partner_id}.pdf",
                 mime="application/pdf",
             )
         except Exception as e:
-            ex2.warning(f"PDF export unavailable: {e}")
+            ex1.warning(f"PDF export unavailable: {e}")
+        ex2.download_button(
+            label="⬇️ Export Plan as JSON",
+            data=json.dumps(onboarding_plan, indent=2, default=str),
+            file_name=f"onboarding_plan_{partner_id}.json",
+            mime="application/json",
+        )
 
     _render_plan_history(user_id)

@@ -425,13 +425,9 @@ def render():
         st.rerun()
 
     # -----------------------------------------------------------------------
-    # Layout: 3:1 columns when reasoning panel is open, full-width otherwise
+    # Layout: always split so reasoning/tasks go to the right sidebar
     # -----------------------------------------------------------------------
-    if show_r:
-        left_main, right_panel = st.columns([3, 1])
-    else:
-        left_main = st.container()
-        right_panel = None
+    left_main, right_panel = st.columns([3, 1])
 
     with left_main:
         # -------------------------------------------------------------------
@@ -474,8 +470,6 @@ def render():
 
         if not filtered:
             st.warning("No leads match the current filters.")
-            if right_panel is None:
-                _render_active_tasks(user_id)
             _render_history(user_id)
             return
 
@@ -548,20 +542,14 @@ def render():
             st.rerun()
 
         # -------------------------------------------------------------------
-        # Inline task cards (when right panel is closed)
-        # -------------------------------------------------------------------
-        if right_panel is None:
-            _render_active_tasks(user_id)
-
-        # -------------------------------------------------------------------
         # Outreach History
         # -------------------------------------------------------------------
         _render_history(user_id)
 
     # -----------------------------------------------------------------------
-    # Right reasoning panel
+    # Right reasoning panel — always rendered here
     # -----------------------------------------------------------------------
-    if right_panel is not None:
-        with right_panel:
+    with right_panel:
+        if st.session_state.get("_active_task_ids"):
             st.markdown("**🧠 Agent Reasoning**")
-            _render_active_tasks(user_id)
+        _render_active_tasks(user_id)
