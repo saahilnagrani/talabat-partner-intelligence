@@ -77,8 +77,16 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.11 — Changelog", expanded=False):
+    with st.expander("📋 v2.12 — Changelog", expanded=False):
         st.markdown(
+            "**v2.12** — Reasoning & tool-call display removed from all tabs (to be redesigned) · "
+            "Onboarding: generate goes straight to plan history (no inline display) · "
+            "History card now shows all plan details: KPIs, manager, promo dropdown with description, "
+            "blockers, warnings, timeline, export buttons · "
+            "Newest plan auto-expanded on generation · "
+            "PDF rebuilt with explicit widths (fixes horizontal-space crash) · "
+            "PDF now includes promo + description, full milestone descriptions, go-live banner · "
+            "Promo dropdown is per-plan-entry with live description caption\n\n"
             "**v2.11** — Login now persists across page refresh (cookie hydration fix) · "
             "Agent reasoning always renders in right sidebar (onboarding + sales) · "
             "Onboarding timeline text visible on dark theme · "

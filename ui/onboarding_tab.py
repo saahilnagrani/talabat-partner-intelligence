@@ -16,11 +16,7 @@ from storage import (
     save_onboarding_plan,
     clear_onboarding_plans,
 )
-from ui.components import (
-    render_thinking_box,
-    render_tool_call_card,
-    render_onboarding_timeline,
-)
+from ui.components import render_onboarding_timeline
 from auth import get_current_user
 
 # ---------------------------------------------------------------------------
@@ -67,82 +63,119 @@ def _build_pdf(plan: dict) -> bytes:
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
+    # Calculate usable page width explicitly to avoid cell(0,...) crashes
+    usable_w = pdf.w - pdf.l_margin - pdf.r_margin
+
     orange = (255, 96, 0)
 
-    # Header
+    # ---- Header ----
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*orange)
-    pdf.cell(0, 10, "talabat Partner Onboarding Plan", ln=True)
+    pdf.cell(usable_w, 10, "talabat Partner Onboarding Plan", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(50, 50, 50)
-    pdf.cell(0, 6, _safe_text(plan.get("plan_title", "")), ln=True)
+    pdf.cell(usable_w, 6, _safe_text(plan.get("plan_title", "")), ln=True)
     pdf.ln(4)
 
-    # Key metrics
+    # ---- Key Metrics ----
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(*orange)
-    pdf.cell(0, 7, "Key Metrics", ln=True)
+    pdf.cell(usable_w, 7, "Key Metrics", ln=True)
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(60, 60, 60)
+    label_w = 55
+    val_w = usable_w - label_w
     metrics = [
         ("Go-Live Target",  f"Day {plan.get('go_live_target_days', 7)}"),
         ("Day-1 Orders",    str(plan.get("expected_day_1_orders", ""))),
         ("Day-7 Orders",    str(plan.get("expected_day_7_orders", ""))),
         ("30-Day GMV",      f"AED {plan.get('expected_30d_gmv_aed', 0):,.0f}"),
         ("Success Manager", plan.get("assigned_success_manager", "TBD")),
-        ("Launch Promo",    plan.get("first_promo_recommendation", "TBD")),
     ]
     for label, value in metrics:
-        pdf.cell(60, 6, f"{label}:", border=0)
-        pdf.cell(0, 6, _safe_text(value), ln=True)
-    pdf.ln(4)
+        pdf.cell(label_w, 6, f"{label}:", border=0)
+        pdf.cell(val_w, 6, _safe_text(value), ln=True)
+    pdf.ln(2)
 
-    # Blockers
+    # ---- Launch Promo ----
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(*orange)
+    pdf.cell(usable_w, 7, "Launch Promotion", ln=True)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(60, 60, 60)
+    pdf.cell(label_w, 6, "Promo:", border=0)
+    pdf.cell(val_w, 6, _safe_text(plan.get("first_promo_recommendation", "TBD")), ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(100, 100, 100)
+    promo_desc = _safe_text(plan.get("promo_description", ""))
+    if promo_desc:
+        pdf.multi_cell(usable_w, 5, promo_desc)
+    pdf.ln(2)
+
+    # ---- Blockers ----
     blockers = plan.get("menu_blockers", [])
     if blockers:
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(180, 0, 0)
-        pdf.cell(0, 7, "Menu Blockers (must resolve before go-live)", ln=True)
+        pdf.cell(usable_w, 7, "Menu Blockers (must resolve before go-live)", ln=True)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(60, 60, 60)
         for b in blockers:
-            pdf.multi_cell(0, 6, _safe_text(f"  * {b}"))
+            pdf.multi_cell(usable_w, 6, _safe_text(f"  * {b}"))
         pdf.ln(2)
 
-    # Warnings
+    # ---- Warnings ----
     warnings = plan.get("menu_warnings", [])
     if warnings:
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(180, 120, 0)
-        pdf.cell(0, 7, "Additional Issues (not blocking)", ln=True)
+        pdf.cell(usable_w, 7, "Additional Issues (not blocking)", ln=True)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(60, 60, 60)
         for w in warnings:
-            pdf.multi_cell(0, 6, _safe_text(f"  * {w}"))
+            pdf.multi_cell(usable_w, 6, _safe_text(f"  * {w}"))
         pdf.ln(2)
 
-    # Milestone table
+    # ---- Onboarding Timeline ----
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_text_color(*orange)
-    pdf.cell(0, 7, "Onboarding Milestones", ln=True)
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_fill_color(50, 50, 50)
-    pdf.cell(15, 6, "Day",   border=1, fill=True)
-    pdf.cell(30, 6, "Owner", border=1, fill=True)
-    pdf.cell(15, 6, "Block", border=1, fill=True)
-    pdf.cell(0,  6, "Milestone", border=1, fill=True, ln=True)
+    pdf.cell(usable_w, 7, "Onboarding Timeline", ln=True)
+    pdf.ln(1)
 
     milestones = sorted(plan.get("milestones", []), key=lambda m: m.get("day", 0))
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(40, 40, 40)
-    pdf.set_fill_color(250, 250, 250)
     for m in milestones:
-        blocking = "Yes" if m.get("blocking") else ""
-        pdf.cell(15, 6, str(m.get("day", "")),                          border=1)
-        pdf.cell(30, 6, m.get("owner", "").capitalize(),                 border=1)
-        pdf.cell(15, 6, blocking,                                        border=1)
-        pdf.cell(0,  6, _safe_text(m.get("title", ""))[:70],            border=1, ln=True)
+        is_golive = "GO LIVE" in m.get("title", "")
+
+        if is_golive:
+            # Orange banner for go-live
+            pdf.set_fill_color(*orange)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("Helvetica", "B", 10)
+            label = _safe_text(f"  Day {m['day']}  |  {m.get('title', '')}")
+            pdf.cell(usable_w, 8, label, border=0, fill=True, ln=True)
+            pdf.set_text_color(60, 60, 60)
+            pdf.set_font("Helvetica", "", 9)
+            if m.get("description"):
+                pdf.multi_cell(usable_w, 5, _safe_text(f"  {m['description']}"))
+        else:
+            # Day header line
+            owner = m.get("owner", "").upper()
+            blocking_tag = "  |  BLOCKING" if m.get("blocking") else ""
+            header = _safe_text(f"Day {m['day']}  |  {owner}{blocking_tag}")
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_text_color(130, 130, 130)
+            pdf.cell(usable_w, 5, header, ln=True)
+            # Title
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_text_color(40, 40, 40)
+            pdf.cell(usable_w, 5, _safe_text(m.get("title", "")), ln=True)
+            # Description
+            if m.get("description"):
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(100, 100, 100)
+                pdf.multi_cell(usable_w, 4, _safe_text(m["description"]))
+
+        pdf.ln(2)
 
     return bytes(pdf.output())
 
@@ -163,8 +196,12 @@ def _save_plan_to_cache(user_id: str, plan: dict) -> None:
     save_onboarding_plan(user_id, plan.get("partner_id", ""), plan, ts)
 
 
-def _render_plan_history(user_id: str) -> None:
-    """Render saved onboarding plans grouped by date."""
+def _render_plan_history(user_id: str, newest_expanded: bool = False) -> None:
+    """Render saved onboarding plans grouped by date.
+
+    Args:
+        newest_expanded: If True the first (most recent) plan is auto-expanded.
+    """
     history = st.session_state.get("onboarding_plan_cache", [])
     if not history:
         return
@@ -178,6 +215,8 @@ def _render_plan_history(user_id: str) -> None:
         st.rerun()
 
     today = date.today()
+    first_item = True  # track whether to auto-expand
+
     for dt_date, group in groupby(history, key=lambda x: x["timestamp"].date()):
         if dt_date == today:
             label = "Today"
@@ -186,25 +225,83 @@ def _render_plan_history(user_id: str) -> None:
         else:
             label = dt_date.strftime("%d %B %Y")
         st.markdown(f"**{label}**")
+
         for item in list(group):
             p = item["plan"]
             ts = item["timestamp"].strftime("%H:%M")
             key_ts = item["timestamp"].isoformat()
+
+            # Auto-expand the most recently generated plan
+            should_expand = newest_expanded and first_item
+            first_item = False
+
             with st.expander(
                 f"📋 {ts} · {p.get('partner_name', '')} — {p.get('plan_title', '')}",
-                expanded=False,
+                expanded=should_expand,
             ):
+                # 1. KPI metrics
                 mc = st.columns(4)
                 mc[0].metric("Go-Live Target", f"Day {p.get('go_live_target_days', 7)}")
                 mc[1].metric("Day-1 Orders", p.get("expected_day_1_orders", "—"))
                 mc[2].metric("Day-7 Orders", p.get("expected_day_7_orders", "—"))
                 mc[3].metric("30-Day GMV", f"AED {p.get('expected_30d_gmv_aed', 0):,.0f}")
+
+                # 2. Success manager
+                st.info(f"👤 **Success Manager:** {p.get('assigned_success_manager', 'TBD')}")
+
+                # 3. Launch promo dropdown (per-entry override, keyed by timestamp)
+                promo_key = f"promo_hist_{key_ts}"
+                saved_promo = p.get("first_promo_recommendation", list(PROMO_OPTIONS)[0])
+                current_promo = st.session_state.get(promo_key, saved_promo)
+                if current_promo not in PROMO_OPTIONS:
+                    current_promo = list(PROMO_OPTIONS)[0]
+
+                chosen_promo = st.selectbox(
+                    "🎁 Launch Promo",
+                    options=list(PROMO_OPTIONS.keys()),
+                    index=list(PROMO_OPTIONS.keys()).index(current_promo),
+                    key=promo_key,
+                )
+                st.caption(PROMO_OPTIONS[chosen_promo])
+
+                # 4. Blockers
+                blockers = p.get("menu_blockers", [])
+                if blockers:
+                    st.warning(
+                        "**🔴 Menu Blockers — must resolve before go-live:**\n"
+                        + "\n".join(f"- {b}" for b in blockers)
+                    )
+
+                # 5. Warnings
+                warnings = p.get("menu_warnings", [])
+                if warnings:
+                    st.info(
+                        "**⚠️ Additional Issues (not blocking, but important):**\n"
+                        + "\n".join(f"- {w}" for w in warnings)
+                    )
+
+                # 6. Timeline + legend
                 render_onboarding_timeline(p)
+                st.markdown(
+                    '<div style="font-size:0.8em;color:#666;margin-top:8px;">'
+                    '🟠 talabat &nbsp;|&nbsp; 🔵 Restaurant &nbsp;|&nbsp;'
+                    ' 🟣 Both &nbsp;|&nbsp; 🔴 BLOCKING = critical path milestone'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # 7. Export buttons — build PDF with the chosen promo override
+                st.divider()
+                p_for_export = {
+                    **p,
+                    "first_promo_recommendation": chosen_promo,
+                    "promo_description": PROMO_OPTIONS[chosen_promo],
+                }
                 dl1, dl2 = st.columns(2)
                 try:
                     dl1.download_button(
                         label="⬇️ Export as PDF",
-                        data=_build_pdf(p),
+                        data=_build_pdf(p_for_export),
                         file_name=f"onboarding_plan_{p.get('partner_id', 'plan')}.pdf",
                         mime="application/pdf",
                         key=f"dl_pdf_{key_ts}",
@@ -213,7 +310,7 @@ def _render_plan_history(user_id: str) -> None:
                     dl1.warning(f"PDF unavailable: {e}")
                 dl2.download_button(
                     label="⬇️ Export as JSON",
-                    data=json.dumps(p, indent=2, default=str),
+                    data=json.dumps(p_for_export, indent=2, default=str),
                     file_name=f"onboarding_plan_{p.get('partner_id', 'plan')}.json",
                     mime="application/json",
                     key=f"dl_json_{key_ts}",
@@ -228,7 +325,6 @@ def render():
     user_id = get_current_user()
     _ensure_plans_loaded(user_id)
 
-    # Bug 3 fix: surface Supabase errors in the onboarding tab
     if supabase_err := st.session_state.get("_supabase_error"):
         st.warning(f"⚠️ Supabase error (history may not persist): {supabase_err}")
 
@@ -238,7 +334,7 @@ def render():
         "targeting first order within 7 days and 100 orders by day 30."
     )
 
-    # Get new partners for the selector
+    # Partner selector
     all_partners = get_partners()
     new_partners = [p for p in all_partners if p.status == "new"]
 
@@ -250,26 +346,14 @@ def render():
     selected_label = st.selectbox("Select a new partner to onboard", options=list(partner_options.keys()))
     partner_id = partner_options[selected_label]
 
-    # Preview selected partner
+    # Preview selected partner metrics
     selected_partner = next((p for p in new_partners if p.partner_id == partner_id), None)
     if selected_partner:
         cols = st.columns(4)
         cols[0].metric("Menu Items", selected_partner.active_menu_items)
         cols[1].metric("Cuisine", selected_partner.cuisine_type)
-        # Bug 5 fix: show full area name on hover instead of truncating
         cols[2].metric("Area", selected_partner.area, help=selected_partner.area)
         cols[3].metric("Current Orders/mo", selected_partner.monthly_orders)
-
-    # Bug 2 fix: reasoning toggle lives outside the run_btn guard so it persists across reruns
-    show_r = st.session_state.get("_show_reasoning", False)
-    _, toggle_col = st.columns([5, 1])
-    if toggle_col.button(
-        "✕ Reasoning" if show_r else "🔍 Reasoning",
-        key="toggle_r_onboarding",
-        use_container_width=True,
-    ):
-        st.session_state["_show_reasoning"] = not show_r
-        st.rerun()
 
     run_btn = st.button("📋 Generate Onboarding Plan", use_container_width=True, key="run_onboarding")
 
@@ -279,167 +363,31 @@ def render():
         return
 
     # -----------------------------------------------------------------------
-    # Layout: always split so reasoning goes to the right sidebar
+    # Agent execution — run silently, extract plan from tool results
     # -----------------------------------------------------------------------
-    col_main, col_panel = st.columns([3, 1])
-
-    # -----------------------------------------------------------------------
-    # Agent execution — reasoning always renders in right panel
-    # -----------------------------------------------------------------------
-    reasoning_target = col_panel
-
-    # Defer headers until the agent actually starts emitting events
-    thinking_placeholder = None
-    thinking_text = ""
-    tool_area = None
-    headers_rendered = False
-
-    def _ensure_headers():
-        nonlocal thinking_placeholder, tool_area, headers_rendered
-        if headers_rendered:
-            return
-        headers_rendered = True
-        with reasoning_target:
-            st.markdown("**🧠 Agent Reasoning**")
-            thinking_placeholder = st.empty()
-            tool_area = st.container()
-
-    pending_calls: dict[str, dict] = {}
     onboarding_plan: dict | None = None
 
     with st.spinner("Building onboarding plan…"):
         for event in run_onboarding_agent(partner_id=partner_id):
-            if event.type == "thinking":
-                _ensure_headers()
-                thinking_text += event.data
-                thinking_placeholder.markdown(
-                    render_thinking_box(thinking_text),
-                    unsafe_allow_html=True,
-                )
-
-            elif event.type == "tool_call":
-                _ensure_headers()
-                tid = event.data.get("tool_use_id", "")
-                pending_calls[tid] = {
-                    "name": event.data["name"],
-                    "inputs": event.data["inputs"],
-                }
-
-            elif event.type == "tool_result":
-                _ensure_headers()
-                tid = event.data.get("tool_use_id", "")
+            if event.type == "tool_result":
+                name = event.data.get("name", "")
                 result = event.data.get("result", {})
-                name = event.data["name"]
-
-                call_info = pending_calls.pop(tid, {"name": name, "inputs": {}})
-                with tool_area:
-                    render_tool_call_card(call_info["name"], call_info["inputs"], result)
-
-                if name == "build_onboarding_plan" and isinstance(result, dict) and "milestones" in result:
+                if (
+                    name == "build_onboarding_plan"
+                    and isinstance(result, dict)
+                    and "milestones" in result
+                ):
                     onboarding_plan = result
-
-            elif event.type == "complete":
-                st.success("✅ Onboarding plan ready!")
-
             elif event.type == "error":
                 st.error(f"Agent error: {event.data}")
+                _render_plan_history(user_id)
                 return
 
-    # -----------------------------------------------------------------------
-    # Results
-    # -----------------------------------------------------------------------
-    if not onboarding_plan:
-        _render_plan_history(user_id)
-        return
+    if onboarding_plan:
+        _save_plan_to_cache(user_id, onboarding_plan)
+        st.success("✅ Plan generated — see history below.")
+    else:
+        st.warning("Agent completed but no plan was produced.")
 
-    # Persist the plan
-    _save_plan_to_cache(user_id, onboarding_plan)
-
-    with col_main:
-        st.divider()
-        st.markdown(f"### {onboarding_plan.get('plan_title', 'Onboarding Plan')}")
-
-        # Metrics row
-        mc = st.columns(4)
-        mc[0].metric("Go-Live Target", f"Day {onboarding_plan.get('go_live_target_days', 7)}")
-        mc[1].metric("Day-1 Orders", onboarding_plan.get("expected_day_1_orders", "—"))
-        mc[2].metric("Day-7 Orders", onboarding_plan.get("expected_day_7_orders", "—"))
-        mc[3].metric(
-            "30-Day GMV",
-            f"AED {onboarding_plan.get('expected_30d_gmv_aed', 0):,.0f}",
-        )
-
-        # Manager + promo override
-        col1, col2 = st.columns(2)
-        col1.info(f"👤 **Success Manager:** {onboarding_plan.get('assigned_success_manager', 'TBD')}")
-
-        promo_key = f"promo_override_{partner_id}"
-        current_promo = st.session_state.get(
-            promo_key,
-            onboarding_plan.get("first_promo_recommendation", list(PROMO_OPTIONS)[0]),
-        )
-        if current_promo not in PROMO_OPTIONS:
-            current_promo = list(PROMO_OPTIONS)[0]
-
-        chosen_promo = col2.selectbox(
-            "🎁 Launch Promo:",
-            options=list(PROMO_OPTIONS.keys()),
-            index=list(PROMO_OPTIONS.keys()).index(current_promo),
-            key=promo_key,
-        )
-        # Patch plan so exports reflect override
-        onboarding_plan["first_promo_recommendation"] = chosen_promo
-        onboarding_plan["promo_description"] = PROMO_OPTIONS[chosen_promo]
-
-        # Promo description via popover ℹ
-        with col2.popover("ℹ Description"):
-            st.markdown(PROMO_OPTIONS[chosen_promo])
-
-        # Blockers — hard stops
-        blockers = onboarding_plan.get("menu_blockers", [])
-        if blockers:
-            st.warning(
-                "**🔴 Menu Blockers — must resolve before go-live:**\n"
-                + "\n".join(f"- {b}" for b in blockers)
-            )
-
-        # Warnings — important but not blocking
-        warnings = onboarding_plan.get("menu_warnings", [])
-        if warnings:
-            st.info(
-                "**⚠️ Additional Issues (not blocking, but important):**\n"
-                + "\n".join(f"- {w}" for w in warnings)
-            )
-
-        # Timeline
-        st.divider()
-        render_onboarding_timeline(onboarding_plan)
-
-        # Legend
-        st.markdown(
-            '<div style="font-size:0.8em;color:#666;margin-top:8px;">'
-            '🟠 talabat &nbsp;|&nbsp; 🔵 Restaurant &nbsp;|&nbsp; 🟣 Both &nbsp;|&nbsp; 🔴 BLOCKING = critical path milestone'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-        # Export buttons (PDF first, JSON second)
-        st.divider()
-        ex1, ex2 = st.columns(2)
-        try:
-            ex1.download_button(
-                label="⬇️ Export Plan as PDF",
-                data=_build_pdf(onboarding_plan),
-                file_name=f"onboarding_plan_{partner_id}.pdf",
-                mime="application/pdf",
-            )
-        except Exception as e:
-            ex1.warning(f"PDF export unavailable: {e}")
-        ex2.download_button(
-            label="⬇️ Export Plan as JSON",
-            data=json.dumps(onboarding_plan, indent=2, default=str),
-            file_name=f"onboarding_plan_{partner_id}.json",
-            mime="application/json",
-        )
-
-    _render_plan_history(user_id)
+    # Always render history; newest_expanded=True so new plan is open
+    _render_plan_history(user_id, newest_expanded=True)

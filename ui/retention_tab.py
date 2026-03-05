@@ -7,8 +7,6 @@ from data.seed import get_partners
 from tools.retention_tools import calculate_health_score
 from agents.retention_agent import run_retention_agent
 from ui.components import (
-    render_thinking_box,
-    render_tool_call_card,
     render_retention_action_card,
     render_risk_badge,
 )
@@ -96,68 +94,16 @@ def render():
         return
 
     # -----------------------------------------------------------------------
-    # Reasoning panel toggle
+    # Agent execution — run silently, extract results from tool_result events
     # -----------------------------------------------------------------------
-    show_r = st.session_state.get("_show_reasoning", False)
-    _, toggle_col = st.columns([5, 1])
-    if toggle_col.button(
-        "✕ Reasoning" if show_r else "🔍 Reasoning",
-        key="toggle_r_retention",
-        use_container_width=True,
-    ):
-        st.session_state["_show_reasoning"] = not show_r
-        st.rerun()
-
-    if show_r:
-        col_main, col_panel = st.columns([3, 1])
-    else:
-        col_main = st.container()
-        col_panel = None
-
-    # -----------------------------------------------------------------------
-    # Agent execution
-    # -----------------------------------------------------------------------
-    reasoning_target = col_panel if col_panel else st.container()
-    with reasoning_target:
-        if show_r:
-            st.markdown("**🧠 Agent Reasoning**")
-        else:
-            st.divider()
-            st.markdown("#### Agent Reasoning")
-        thinking_placeholder = st.empty()
-        thinking_text = ""
-        if not show_r:
-            st.markdown("#### Tool Calls")
-        tool_area = st.container()
-
-    pending_calls: dict[str, dict] = {}
-    retention_actions: list[dict] = []   # from generate_retention_actions
-    revenue_at_risk: dict[str, dict] = {}  # partner_id -> revenue data
+    retention_actions: list[dict] = []
+    revenue_at_risk: dict[str, dict] = {}
 
     with st.spinner(f"Analysing {'at-risk' if risk_filter != 'all' else 'all'} partners…"):
         for event in run_retention_agent(risk_filter=risk_filter, max_partners=max_partners):
-            if event.type == "thinking":
-                thinking_text += event.data
-                thinking_placeholder.markdown(
-                    render_thinking_box(thinking_text),
-                    unsafe_allow_html=True,
-                )
-
-            elif event.type == "tool_call":
-                tid = event.data.get("tool_use_id", "")
-                pending_calls[tid] = {
-                    "name": event.data["name"],
-                    "inputs": event.data["inputs"],
-                }
-
-            elif event.type == "tool_result":
-                tid = event.data.get("tool_use_id", "")
+            if event.type == "tool_result":
                 result = event.data.get("result", {})
-                name = event.data["name"]
-
-                call_info = pending_calls.pop(tid, {"name": name, "inputs": {}})
-                with tool_area:
-                    render_tool_call_card(call_info["name"], call_info["inputs"], result)
+                name = event.data.get("name", "")
 
                 if name == "generate_retention_actions" and isinstance(result, dict) and "recommended_actions" in result:
                     retention_actions.append(result)
@@ -175,37 +121,36 @@ def render():
     # -----------------------------------------------------------------------
     # Results
     # -----------------------------------------------------------------------
-    with col_main:
-        if retention_actions:
-            st.divider()
+    if retention_actions:
+        st.divider()
 
-            # Summary
-            total_rev_at_risk = sum(
-                revenue_at_risk.get(a.get("partner_id", ""), {}).get("monthly_gmv_aed", 0)
-                for a in retention_actions
-            )
-            total_commission = total_rev_at_risk * 0.17
+        # Summary metrics
+        total_rev_at_risk = sum(
+            revenue_at_risk.get(a.get("partner_id", ""), {}).get("monthly_gmv_aed", 0)
+            for a in retention_actions
+        )
+        total_commission = total_rev_at_risk * 0.17
 
-            st.markdown(f"#### Retention Plans — {len(retention_actions)} Partners Analysed")
+        st.markdown(f"#### Retention Plans — {len(retention_actions)} Partners Analysed")
 
-            sc = st.columns(3)
-            sc[0].metric("Partners Analysed", len(retention_actions))
-            sc[1].metric("Total GMV at Risk/mo", f"AED {total_rev_at_risk:,.0f}")
-            sc[2].metric("Talabat Revenue at Risk/mo", f"AED {total_commission:,.0f}")
+        sc = st.columns(3)
+        sc[0].metric("Partners Analysed", len(retention_actions))
+        sc[1].metric("Total GMV at Risk/mo", f"AED {total_rev_at_risk:,.0f}")
+        sc[2].metric("Talabat Revenue at Risk/mo", f"AED {total_commission:,.0f}")
 
-            # Sort by priority
-            priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-            sorted_actions = sorted(
-                retention_actions,
-                key=lambda x: priority_order.get(x.get("priority", "low"), 3),
-            )
+        # Sort by priority
+        priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        sorted_actions = sorted(
+            retention_actions,
+            key=lambda x: priority_order.get(x.get("priority", "low"), 3),
+        )
 
-            st.divider()
-            for action in sorted_actions:
-                pid = action.get("partner_id", "")
-                rev_data = revenue_at_risk.get(pid)
-                with st.container():
-                    render_retention_action_card(action, rev_data)
-                    st.divider()
-        else:
-            st.info("The agent completed but no specific retention actions were collected. Try selecting 'Critical partners only'.")
+        st.divider()
+        for action in sorted_actions:
+            pid = action.get("partner_id", "")
+            rev_data = revenue_at_risk.get(pid)
+            with st.container():
+                render_retention_action_card(action, rev_data)
+                st.divider()
+    else:
+        st.info("The agent completed but no specific retention actions were collected. Try selecting 'Critical partners only'.")

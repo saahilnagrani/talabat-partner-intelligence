@@ -15,8 +15,6 @@ from data.seed import MARKET_BENCHMARKS, get_leads
 from agents.sales_agent import run_sales_agent, run_sales_agent_for_lead
 from tools.sales_tools import score_lead
 from ui.components import (
-    render_thinking_box,
-    render_tool_call_card,
     render_email_card,
     render_score_badge,
 )
@@ -269,11 +267,10 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 def _render_active_tasks(user_id: str) -> None:
-    """Render in-progress and recently completed generation task cards.
+    """Poll in-progress generation tasks; save emails on completion.
 
-    Polls every 1.5 s while tasks are still running. Saves emails to
-    Supabase history when a task completes, then removes it from the
-    active-task list so it is not processed again.
+    Shows a minimal status indicator while running. Thinking and tool-call
+    details are intentionally omitted (to be redesigned later).
     """
     active_ids = st.session_state.get("_active_task_ids", [])
     if not active_ids:
@@ -282,12 +279,10 @@ def _render_active_tasks(user_id: str) -> None:
     still_running_ids: list[str] = []
 
     for task_id in active_ids:
-        # Snapshot under lock — don't hold lock during Streamlit rendering
         with _TASKS_LOCK:
             task = _TASKS.get(task_id)
             if task is None:
                 continue
-            snap_events  = list(task.events)
             snap_emails  = list(task.emails)
             snap_scores  = list(task.scores)
             snap_status  = task.status
@@ -298,25 +293,9 @@ def _render_active_tasks(user_id: str) -> None:
 
         icon = "⏳" if snap_status == "running" else ("✅" if snap_status == "done" else "❌")
         with st.expander(f"{icon} {snap_label}", expanded=(snap_status == "running")):
-            # Thinking box
-            thinking_text = "".join(e.data for e in snap_events if e.type == "thinking")
-            if thinking_text:
-                st.markdown(render_thinking_box(thinking_text), unsafe_allow_html=True)
-
-            # Tool-call cards (replay from accumulated events)
-            pending_calls: dict[str, dict] = {}
-            for e in snap_events:
-                if e.type == "tool_call":
-                    pending_calls[e.data["tool_use_id"]] = e.data
-                elif e.type == "tool_result":
-                    call = pending_calls.pop(e.data.get("tool_use_id", ""), e.data)
-                    render_tool_call_card(
-                        call.get("name", ""),
-                        call.get("inputs", {}),
-                        e.data.get("result"),
-                    )
-
-            if snap_status == "error":
+            if snap_status == "running":
+                st.caption("Generating… emails will appear in history when complete.")
+            elif snap_status == "error":
                 st.error(f"Generation failed: {snap_error}")
 
             # Batch lead-score table (shown once done)
@@ -326,7 +305,6 @@ def _render_active_tasks(user_id: str) -> None:
                         "Restaurant": s.get("restaurant_name", s.get("lead_id", "")),
                         "Score": s.get("score", 0),
                         "GMV/mo (AED)": f"AED {s.get('estimated_monthly_gmv_aed', 0):,.0f}",
-                        "Reasoning": (s.get("reasoning", "")[:80] + "…") if s.get("reasoning") else "",
                     }
                     for s in sorted(snap_scores, key=lambda x: x.get("score", 0), reverse=True)
                 ])
@@ -339,7 +317,6 @@ def _render_active_tasks(user_id: str) -> None:
                 _append_email(snap_uid, email, snap_kind)
             with _TASKS_LOCK:
                 _TASKS.pop(task_id, None)
-            # Not added to still_running_ids → removed from active list
         elif snap_status == "error":
             with _TASKS_LOCK:
                 _TASKS.pop(task_id, None)
@@ -411,25 +388,7 @@ def render():
         "Watch the agent reason through each lead in real time."
     )
 
-    # -----------------------------------------------------------------------
-    # Reasoning panel toggle
-    # -----------------------------------------------------------------------
-    show_r = st.session_state.get("_show_reasoning", False)
-    _, toggle_col = st.columns([5, 1])
-    if toggle_col.button(
-        "✕ Reasoning" if show_r else "🔍 Reasoning",
-        key="toggle_r_sales",
-        use_container_width=True,
-    ):
-        st.session_state["_show_reasoning"] = not show_r
-        st.rerun()
-
-    # -----------------------------------------------------------------------
-    # Layout: always split so reasoning/tasks go to the right sidebar
-    # -----------------------------------------------------------------------
-    left_main, right_panel = st.columns([3, 1])
-
-    with left_main:
+    with st.container():
         # -------------------------------------------------------------------
         # Filters
         # -------------------------------------------------------------------
@@ -542,14 +501,7 @@ def render():
             st.rerun()
 
         # -------------------------------------------------------------------
-        # Outreach History
+        # Active generation tasks + Outreach History
         # -------------------------------------------------------------------
-        _render_history(user_id)
-
-    # -----------------------------------------------------------------------
-    # Right reasoning panel — always rendered here
-    # -----------------------------------------------------------------------
-    with right_panel:
-        if st.session_state.get("_active_task_ids"):
-            st.markdown("**🧠 Agent Reasoning**")
         _render_active_tasks(user_id)
+        _render_history(user_id)
