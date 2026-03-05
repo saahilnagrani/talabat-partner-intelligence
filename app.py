@@ -77,8 +77,11 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.9 — Changelog", expanded=False):
+    with st.expander("📋 v2.10 — Changelog", expanded=False):
         st.markdown(
+            "**v2.10** — Fix Python 3.9 crash (str | None in dataclass) · Reasoning toggle now persists across reruns · "
+            "Supabase errors surfaced in Onboarding tab · Area metric tooltip for long names · "
+            "Agent Reasoning headers deferred until agent starts · Score badge text colour fixed for medium scores\n\n"
             "**v2.9** — Concurrent Quick & Batch generation (threading) · Login persists across refresh · "
             "Right-panel reasoning toggle in all tabs · Onboarding plans saved to Supabase · "
             "Collapsible leads table · Full email subject in history · Batch button inline with lead count · "
