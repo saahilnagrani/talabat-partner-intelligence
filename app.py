@@ -77,8 +77,9 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.13 — Changelog", expanded=False):
+    with st.expander("📋 v2.14 — Changelog", expanded=False):
         st.markdown(
+            "**v2.14** — Login persistence fixed: CookieController.refresh() called after rerun so JS cookie data is actually read on page refresh\\n\\n"
             "**v2.13** — PDF export emoji crash fixed (Latin-1 catch-all strips emoji from all fields · GO LIVE title cleaned)\\n\\n"
             "**v2.12** — Reasoning & tool-call display removed from all tabs (to be redesigned) · "
             "Onboarding: generate goes straight to plan history (no inline display) · "
