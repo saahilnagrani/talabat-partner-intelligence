@@ -369,7 +369,7 @@ def build_onboarding_plan(partner_id: str, all_data: dict) -> dict:
         },
         {
             "day": go_live_days,
-            "title": "GO LIVE 🚀",
+            "title": "GO LIVE",
             "description": f"Restaurant is live on talabat. Launch promo activated: {promo.get('recommended_promo', 'Free Delivery Week')}. Target: {demand.get('forecasted_day_1_orders', 8)} orders on day 1.",
             "owner": "both",
             "blocking": False,

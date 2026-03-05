@@ -43,8 +43,8 @@ PROMO_OPTIONS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 def _safe_text(s: str) -> str:
-    """Replace Unicode characters unsupported by FPDF's built-in Latin-1 fonts."""
-    return (
+    """Replace/strip characters unsupported by FPDF's built-in Latin-1 fonts."""
+    s = (
         str(s)
         .replace("\u2014", "-")   # em dash —
         .replace("\u2013", "-")   # en dash –
@@ -55,6 +55,8 @@ def _safe_text(s: str) -> str:
         .replace("\u2022", "*")   # bullet •
         .replace("\u00a0", " ")   # non-breaking space
     )
+    # Drop any remaining character outside the Latin-1 range (emoji, symbols, etc.)
+    return s.encode("latin-1", errors="ignore").decode("latin-1")
 
 
 def _build_pdf(plan: dict) -> bytes:
