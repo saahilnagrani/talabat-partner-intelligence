@@ -545,6 +545,7 @@ def render():
         )
         row_height   = 38
         table_height = 46 + len(scored_leads) * row_height + 20
+        lead_options = {item["lead"].name: item["lead"].lead_id for item in scored_leads}
 
         # -------------------------------------------------------------------
         # Leads table — collapsible
