@@ -77,8 +77,10 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.17 — Changelog", expanded=False):
+    with st.expander("📋 v2.18 — Changelog", expanded=False):
         st.markdown(
+            "**v2.18** — Lifecycle buttons now impossible to miss: *Mark as Converted* is the **first element** on the Sales tab (above filters) · "
+            "*Mark as Live* partner_id lookup fixed to use Supabase explicit column as fallback (was silently empty for older plans)\n\n"
             "**v2.17** — Lifecycle button visibility: *Mark as Converted* now sits **above** the leads table (visible without scrolling) · "
             "Onboarding newest plan card always auto-expanded so *Mark as Live* is immediately visible\n\n"
             "**v2.16** — Lifecycle button visibility fixes: *Mark as Converted* moved above Quick Outreach (always visible after leads table) · "

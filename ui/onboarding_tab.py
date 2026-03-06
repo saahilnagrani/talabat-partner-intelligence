@@ -351,7 +351,7 @@ def _render_plan_history(user_id: str, newest_expanded: bool = False) -> None:
                 )
 
                 # 8. Mark as Live — persistent lifecycle button
-                plan_partner_id = p.get("partner_id", "")
+                plan_partner_id = p.get("partner_id", "") or item.get("partner_id", "")
                 graduated_ids = st.session_state.get("_graduated_partner_ids", set())
                 if plan_partner_id and plan_partner_id not in graduated_ids:
                     st.markdown("---")
