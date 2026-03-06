@@ -350,6 +350,26 @@ def _render_plan_history(user_id: str, newest_expanded: bool = False) -> None:
                     key=f"dl_json_{key_ts}",
                 )
 
+                # 8. Mark as Live — persistent lifecycle button
+                plan_partner_id = p.get("partner_id", "")
+                graduated_ids = st.session_state.get("_graduated_partner_ids", set())
+                if plan_partner_id and plan_partner_id not in graduated_ids:
+                    st.markdown("---")
+                    live_col, _ = st.columns([2, 3])
+                    if live_col.button(
+                        "🚀 Mark as Live → Retention",
+                        key=f"go_live_hist_{key_ts}",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        _graduate_partner(
+                            plan_partner_id,
+                            p.get("partner_name", plan_partner_id),
+                            None,
+                        )
+                elif plan_partner_id in graduated_ids:
+                    st.success("✅ Live in Retention portfolio")
+
 
 # ---------------------------------------------------------------------------
 # Main render
@@ -433,25 +453,7 @@ def render():
 
     if onboarding_plan:
         _save_plan_to_cache(user_id, onboarding_plan)
-        st.success("✅ Plan generated — see history below.")
-
-        # Mark as Live — graduate this partner to the Retention tab
-        graduated_ids = st.session_state.get("_graduated_partner_ids", set())
-        if partner_id not in graduated_ids:
-            st.markdown("---")
-            st.markdown(
-                "**Ready to go live?** Once the partner's setup is complete, mark them as live "
-                "to move them into the Retention portfolio."
-            )
-            if st.button(
-                "🚀 Mark as Live → Move to Retention",
-                key=f"go_live_{partner_id}",
-                use_container_width=True,
-                type="primary",
-            ):
-                _graduate_partner(partner_id, selected_partner.name if selected_partner else partner_id, selected_partner)
-        else:
-            st.info(f"✅ **{selected_partner.name if selected_partner else partner_id}** is already marked as live. Check the 🛡️ Retention tab.")
+        st.success("✅ Plan generated — expand the card below to view details and mark as live.")
     else:
         st.warning("Agent completed but no plan was produced.")
 

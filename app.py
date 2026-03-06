@@ -77,8 +77,10 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.15 — Changelog", expanded=False):
+    with st.expander("📋 v2.16 — Changelog", expanded=False):
         st.markdown(
+            "**v2.16** — Lifecycle button visibility fixes: *Mark as Converted* moved above Quick Outreach (always visible after leads table) · "
+            "*Mark as Live* button now lives inside every plan history card (persistent, not transient)\n\n"
             "**v2.15** — Cross-tab lifecycle continuity: Sales → Onboarding → Retention now linked end-to-end\n\n"
             "- Sales tab: *Mark as Converted* button converts a signed lead into a new partner (appears immediately in Onboarding dropdown with [From Lead] badge)\n\n"
             "- Onboarding tab: *Mark as Live* button graduates a partner into the Retention portfolio (🆕 tag + live partner count updates)\n\n"

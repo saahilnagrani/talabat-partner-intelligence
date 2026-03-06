@@ -517,6 +517,45 @@ def render():
             components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
 
         # -------------------------------------------------------------------
+        # Mark as Converted — lifecycle bridge to Onboarding tab
+        # -------------------------------------------------------------------
+        st.markdown("---")
+        st.markdown("**✅ Mark as Converted** — move a signed lead into the onboarding queue")
+
+        conv_col1, conv_col2 = st.columns([4, 1])
+        lead_options = {item["lead"].name: item["lead"].lead_id for item in scored_leads}
+        with conv_col1:
+            conv_chosen_name = st.selectbox(
+                "Lead to convert:",
+                options=list(lead_options.keys()),
+                key="conv_lead_select",
+                label_visibility="collapsed",
+            )
+        with conv_col2:
+            conv_btn = st.button(
+                "Convert →",
+                key="conv_btn",
+                use_container_width=True,
+                type="secondary",
+            )
+
+        # Show already-converted leads as a caption
+        converted_lead_ids = {
+            p.source_lead_id
+            for p in st.session_state.get("_converted_partners", [])
+        }
+        already_converted_names = [
+            item["lead"].name
+            for item in scored_leads
+            if item["lead"].lead_id in converted_lead_ids
+        ]
+        if already_converted_names:
+            st.caption(f"Already converted: {', '.join(already_converted_names)}")
+
+        if conv_btn:
+            _convert_lead_to_partner(lead_options[conv_chosen_name])
+
+        # -------------------------------------------------------------------
         # Quick Outreach — single lead
         # -------------------------------------------------------------------
         st.markdown("---")
@@ -524,7 +563,6 @@ def render():
 
         qcol1, qcol2 = st.columns([4, 1])
         with qcol1:
-            lead_options = {item["lead"].name: item["lead"].lead_id for item in scored_leads}
             chosen_name = st.selectbox(
                 "Lead:",
                 options=list(lead_options.keys()),
@@ -569,44 +607,6 @@ def render():
             ).start()
             st.session_state.setdefault("_active_task_ids", []).append(task_id)
             st.rerun()
-
-        # -------------------------------------------------------------------
-        # Mark as Converted — lifecycle bridge to Onboarding tab
-        # -------------------------------------------------------------------
-        st.markdown("---")
-        st.markdown("**✅ Mark as Converted** — move a signed lead into the onboarding queue")
-
-        conv_col1, conv_col2 = st.columns([4, 1])
-        with conv_col1:
-            conv_chosen_name = st.selectbox(
-                "Lead to convert:",
-                options=list(lead_options.keys()),
-                key="conv_lead_select",
-                label_visibility="collapsed",
-            )
-        with conv_col2:
-            conv_btn = st.button(
-                "Convert →",
-                key="conv_btn",
-                use_container_width=True,
-                type="secondary",
-            )
-
-        # Show already-converted leads as a caption
-        converted_lead_ids = {
-            p.source_lead_id
-            for p in st.session_state.get("_converted_partners", [])
-        }
-        already_converted_names = [
-            item["lead"].name
-            for item in scored_leads
-            if item["lead"].lead_id in converted_lead_ids
-        ]
-        if already_converted_names:
-            st.caption(f"Already converted: {', '.join(already_converted_names)}")
-
-        if conv_btn:
-            _convert_lead_to_partner(lead_options[conv_chosen_name])
 
         # -------------------------------------------------------------------
         # Active generation tasks + Outreach History
