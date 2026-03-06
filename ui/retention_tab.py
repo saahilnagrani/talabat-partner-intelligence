@@ -12,14 +12,30 @@ from ui.components import (
 )
 
 
+def _get_all_active_partners():
+    """Return the full list of active partners — seed + graduated converted partners."""
+    seed_active = [p for p in get_partners() if p.status != "new"]
+    graduated_ids = st.session_state.get("_graduated_partner_ids", set())
+    graduated = [
+        p for p in st.session_state.get("_converted_partners", [])
+        if p.partner_id in graduated_ids
+    ]
+    return seed_active + graduated, graduated_ids
+
+
 def _get_partner_summary_df():
-    """Build a quick health-score summary table for the portfolio overview."""
-    partners = [p for p in get_partners() if p.status != "new"]
+    """Build a quick health-score summary table for the portfolio overview.
+
+    Merges static seed partners (non-new) with any partners graduated from
+    the Onboarding tab this session.
+    """
+    all_active, graduated_ids = _get_all_active_partners()
     rows = []
-    for p in partners:
+    for p in all_active:
         h = calculate_health_score(p.partner_id)
+        is_recently_onboarded = p.partner_id in graduated_ids
         rows.append({
-            "Partner": p.name,
+            "Partner": f"{p.name} 🆕" if is_recently_onboarded else p.name,
             "Area": p.area,
             "Cuisine": p.cuisine_type,
             "Health Score": h.get("health_score", 0),
@@ -33,6 +49,15 @@ def _get_partner_summary_df():
 
 
 def render():
+    # Cross-tab lifecycle banner — shown after a partner is marked as live in Onboarding tab
+    banner = st.session_state.get("_lifecycle_banner")
+    if banner and banner.get("type") == "graduation":
+        st.success(
+            f"🚀 **{banner['name']}** has completed onboarding and is now live in the portfolio! "
+            "They appear below with a 🆕 tag."
+        )
+        st.session_state._lifecycle_banner = None
+
     st.markdown(
         "### 🛡️ Retention Agent\n"
         "Analyses the partner portfolio using a 5-signal health score, identifies at-risk restaurants, "
@@ -46,8 +71,9 @@ def render():
         critical_count = (df["Risk"] == "critical").sum()
         at_risk_count = (df["Risk"].isin(["at_risk", "high", "medium"])).sum()
 
-        # GMV at risk from declining partners
-        at_risk_partners = [p for p in get_partners() if p.status in ("at_risk", "critical")]
+        # GMV at risk from declining partners — include graduated partners in the pool
+        all_active, graduated_ids = _get_all_active_partners()
+        at_risk_partners = [p for p in all_active if p.status in ("at_risk", "critical")]
         total_gmv_at_risk = sum(p.gmv_aed_last_30d for p in at_risk_partners)
 
         mc = st.columns(4)

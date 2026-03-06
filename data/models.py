@@ -38,6 +38,8 @@ class RestaurantPartner(BaseModel):
     support_tickets_open: int
     gmv_aed_last_30d: float
     status: Literal["new", "healthy", "at_risk", "critical"] = "healthy"
+    source_lead_id: Optional[str] = None   # set when created via "Mark as Converted" in Sales tab
+    recently_onboarded: bool = False        # set True when "Mark as Live" is clicked in Onboarding tab
 
 
 class OutreachEmail(BaseModel):

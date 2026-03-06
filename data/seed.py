@@ -403,6 +403,29 @@ COMPETITOR_DATA = {
 _leads_cache: list[RestaurantLead] | None = None
 _partners_cache: list[RestaurantPartner] | None = None
 
+# ---------------------------------------------------------------------------
+# Runtime registries — populated by the UI layer (no Streamlit import needed)
+# These allow agent tool calls to resolve dynamically created partners.
+# ---------------------------------------------------------------------------
+
+_runtime_partners: dict[str, "RestaurantPartner"] = {}    # converted leads (status="new")
+_graduated_partners: dict[str, "RestaurantPartner"] = {}  # partners marked as live
+
+
+def register_runtime_partner(partner: "RestaurantPartner") -> None:
+    """Register a partner created from a converted lead so agents can resolve it."""
+    _runtime_partners[partner.partner_id] = partner
+
+
+def register_graduated_partner(partner: "RestaurantPartner") -> None:
+    """Register a graduated (live) partner so the retention agent can see it."""
+    _graduated_partners[partner.partner_id] = partner
+
+
+def get_graduated_partners() -> list["RestaurantPartner"]:
+    """Return all partners that have been marked as live this session."""
+    return list(_graduated_partners.values())
+
 
 def get_leads() -> list[RestaurantLead]:
     global _leads_cache
@@ -423,4 +446,8 @@ def get_lead_by_id(lead_id: str) -> RestaurantLead | None:
 
 
 def get_partner_by_id(partner_id: str) -> RestaurantPartner | None:
-    return next((p for p in get_partners() if p.partner_id == partner_id), None)
+    result = next((p for p in get_partners() if p.partner_id == partner_id), None)
+    if result:
+        return result
+    # Fall back to runtime registries for dynamically created/graduated partners
+    return _runtime_partners.get(partner_id) or _graduated_partners.get(partner_id)

@@ -77,10 +77,15 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.14 — Changelog", expanded=False):
+    with st.expander("📋 v2.15 — Changelog", expanded=False):
         st.markdown(
-            "**v2.14** — Login persistence fixed: CookieController.refresh() called after rerun so JS cookie data is actually read on page refresh\\n\\n"
-            "**v2.13** — PDF export emoji crash fixed (Latin-1 catch-all strips emoji from all fields · GO LIVE title cleaned)\\n\\n"
+            "**v2.15** — Cross-tab lifecycle continuity: Sales → Onboarding → Retention now linked end-to-end\n\n"
+            "- Sales tab: *Mark as Converted* button converts a signed lead into a new partner (appears immediately in Onboarding dropdown with [From Lead] badge)\n\n"
+            "- Onboarding tab: *Mark as Live* button graduates a partner into the Retention portfolio (🆕 tag + live partner count updates)\n\n"
+            "- Lifecycle banners guide users to the next tab after each action\n\n"
+            "- Agent tool layer updated: onboarding + retention agents resolve dynamically created partners via runtime registry (no 'partner not found' errors)\n\n"
+            "**v2.14** — Login persistence fixed: CookieController.refresh() called after rerun so JS cookie data is actually read on page refresh\n\n"
+            "**v2.13** — PDF export emoji crash fixed (Latin-1 catch-all strips emoji from all fields · GO LIVE title cleaned)\n\n"
             "**v2.12** — Reasoning & tool-call display removed from all tabs (to be redesigned) · "
             "Onboarding: generate goes straight to plan history (no inline display) · "
             "History card now shows all plan details: KPIs, manager, promo dropdown with description, "
@@ -109,14 +114,10 @@ with st.sidebar:
             "**v2.7** — Realistic menu data for new partners · Blockers vs warnings split in onboarding\n\n"
             "**v2.6** — Restored sidebar toggle & GitHub icon\n\n"
             "**v2.5** — Transparent header (no Streamlit branding)\n\n"
-            "**v2.2** — User login (alice/bob) · Supabase-persistent "
-            "email history · per-user isolation\n\n"
-            "**v2.1** — ⚡ Quick Outreach · 📬 Email history grouped "
-            "by date · Gmail & Outlook launch buttons\n\n"
-            "**v2.0** — Sortable leads table · Score tooltips (ℹ) · "
-            "Full-width tabs · One-line header\n\n"
-            "**v1.0** — Initial release: Sales · Onboarding · "
-            "Retention agent tabs"
+            "**v2.2** — User login (alice/bob) · Supabase-persistent email history · per-user isolation\n\n"
+            "**v2.1** — ⚡ Quick Outreach · 📬 Email history grouped by date · Gmail & Outlook launch buttons\n\n"
+            "**v2.0** — Sortable leads table · Score tooltips (ℹ) · Full-width tabs · One-line header\n\n"
+            "**v1.0** — Initial release: Sales · Onboarding · Retention agent tabs"
         )
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,15 @@ if not get_current_user():
     with col:
         show_login_form()
     st.stop()
+
+# ---------------------------------------------------------------------------
+# Cross-tab lifecycle state — initialize once per session
+# These three keys are the bridge between the Sales, Onboarding, and
+# Retention tabs, enabling the lead → partner → active portfolio flow.
+# ---------------------------------------------------------------------------
+st.session_state.setdefault("_converted_partners", [])       # List[RestaurantPartner]: leads converted to partners
+st.session_state.setdefault("_graduated_partner_ids", set()) # Set[str]: partner_ids marked as live
+st.session_state.setdefault("_lifecycle_banner", None)       # Optional[dict]: consumed-once cross-tab notification
 
 # ---------------------------------------------------------------------------
 # Tabs (only rendered when authenticated)

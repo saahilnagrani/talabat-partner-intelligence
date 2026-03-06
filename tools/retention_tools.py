@@ -2,7 +2,7 @@
 Tool functions and schemas for the Retention Agent.
 """
 from datetime import datetime
-from data.seed import get_partners, get_partner_by_id
+from data.seed import get_partners, get_partner_by_id, get_graduated_partners
 import config
 
 
@@ -99,9 +99,13 @@ def _risk_label(score: float) -> str:
 # ---------------------------------------------------------------------------
 
 def get_all_partners(risk_filter: str = "all") -> list[dict]:
-    """Return filtered list of active partners."""
-    partners = get_partners()
-    # Exclude new partners from retention analysis
+    """Return filtered list of active partners.
+
+    Includes both static seed partners and any partners graduated from
+    the Onboarding tab this session (registered via register_graduated_partner).
+    """
+    partners = get_partners() + get_graduated_partners()
+    # Exclude new (not yet live) partners from retention analysis
     partners = [p for p in partners if p.status != "new"]
     if risk_filter == "critical":
         partners = [p for p in partners if p.status == "critical"]

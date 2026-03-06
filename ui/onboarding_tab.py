@@ -9,7 +9,7 @@ from itertools import groupby
 import streamlit as st
 from fpdf import FPDF
 
-from data.seed import get_partners
+from data.seed import get_partners, register_graduated_partner
 from agents.onboarding_agent import run_onboarding_agent
 from storage import (
     load_onboarding_plans,
@@ -198,6 +198,38 @@ def _save_plan_to_cache(user_id: str, plan: dict) -> None:
     save_onboarding_plan(user_id, plan.get("partner_id", ""), plan, ts)
 
 
+# ---------------------------------------------------------------------------
+# Partner graduation (cross-tab lifecycle bridge to Retention)
+# ---------------------------------------------------------------------------
+
+def _graduate_partner(partner_id: str, partner_name: str, partner_obj) -> None:
+    """Mark a new partner as live, making them visible in the Retention tab.
+
+    Adds the partner_id to _graduated_partner_ids in session state and
+    registers the partner object in the seed runtime registry so the
+    retention agent's get_all_partners() tool call can include them.
+    Sets _lifecycle_banner to guide the user to the Retention tab.
+    """
+    graduated_ids = st.session_state.get("_graduated_partner_ids", set())
+    if partner_id in graduated_ids:
+        st.info(f"**{partner_name}** has already been marked as live.")
+        return
+
+    graduated_ids.add(partner_id)
+    st.session_state._graduated_partner_ids = graduated_ids
+
+    if partner_obj is not None:
+        register_graduated_partner(partner_obj)
+
+    st.session_state._lifecycle_banner = {
+        "type": "graduation",
+        "name": partner_name,
+        "partner_id": partner_id,
+        "lead_id": None,
+    }
+    st.rerun()
+
+
 def _render_plan_history(user_id: str, newest_expanded: bool = False) -> None:
     """Render saved onboarding plans grouped by date.
 
@@ -327,6 +359,15 @@ def render():
     user_id = get_current_user()
     _ensure_plans_loaded(user_id)
 
+    # Cross-tab lifecycle banner — show when a lead was just converted in Sales tab
+    banner = st.session_state.get("_lifecycle_banner")
+    if banner and banner.get("type") == "conversion":
+        st.info(
+            f"🔗 **{banner['name']}** was just converted from a lead and is ready to onboard. "
+            "Select them from the dropdown below (look for the **[From Lead]** tag)."
+        )
+        st.session_state._lifecycle_banner = None
+
     if supabase_err := st.session_state.get("_supabase_error"):
         st.warning(f"⚠️ Supabase error (history may not persist): {supabase_err}")
 
@@ -336,19 +377,24 @@ def render():
         "targeting first order within 7 days and 100 orders by day 30."
     )
 
-    # Partner selector
-    all_partners = get_partners()
-    new_partners = [p for p in all_partners if p.status == "new"]
+    # Partner selector — merge static seed new partners with dynamically converted leads
+    seed_new_partners = [p for p in get_partners() if p.status == "new"]
+    converted_partners = st.session_state.get("_converted_partners", [])
+    new_partners = seed_new_partners + converted_partners  # IDs never collide
 
     if not new_partners:
         st.warning("No new partners found in the dataset.")
         return
 
-    partner_options = {f"{p.name} ({p.cuisine_type}, {p.area})": p.partner_id for p in new_partners}
+    def _partner_label(p) -> str:
+        base = f"{p.name} ({p.cuisine_type}, {p.area})"
+        return f"{base}  [From Lead]" if getattr(p, "source_lead_id", None) else base
+
+    partner_options = {_partner_label(p): p.partner_id for p in new_partners}
     selected_label = st.selectbox("Select a new partner to onboard", options=list(partner_options.keys()))
     partner_id = partner_options[selected_label]
 
-    # Preview selected partner metrics
+    # Preview selected partner metrics (search across merged list)
     selected_partner = next((p for p in new_partners if p.partner_id == partner_id), None)
     if selected_partner:
         cols = st.columns(4)
@@ -388,6 +434,24 @@ def render():
     if onboarding_plan:
         _save_plan_to_cache(user_id, onboarding_plan)
         st.success("✅ Plan generated — see history below.")
+
+        # Mark as Live — graduate this partner to the Retention tab
+        graduated_ids = st.session_state.get("_graduated_partner_ids", set())
+        if partner_id not in graduated_ids:
+            st.markdown("---")
+            st.markdown(
+                "**Ready to go live?** Once the partner's setup is complete, mark them as live "
+                "to move them into the Retention portfolio."
+            )
+            if st.button(
+                "🚀 Mark as Live → Move to Retention",
+                key=f"go_live_{partner_id}",
+                use_container_width=True,
+                type="primary",
+            ):
+                _graduate_partner(partner_id, selected_partner.name if selected_partner else partner_id, selected_partner)
+        else:
+            st.info(f"✅ **{selected_partner.name if selected_partner else partner_id}** is already marked as live. Check the 🛡️ Retention tab.")
     else:
         st.warning("Agent completed but no plan was produced.")
 

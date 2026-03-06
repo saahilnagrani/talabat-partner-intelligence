@@ -11,7 +11,8 @@ import uuid
 from dataclasses import dataclass, field as dc_field
 from datetime import datetime, date, timedelta
 from itertools import groupby
-from data.seed import MARKET_BENCHMARKS, get_leads
+from data.seed import MARKET_BENCHMARKS, get_leads, get_lead_by_id, register_runtime_partner
+from data.models import RestaurantPartner
 from agents.sales_agent import run_sales_agent, run_sales_agent_for_lead
 from tools.sales_tools import score_lead
 from ui.components import (
@@ -90,6 +91,66 @@ def _append_email(user_id: str, email: dict, source: str) -> None:
 def _clear_history(user_id: str) -> None:
     st.session_state.email_history_cache = []
     clear_history(user_id)
+
+
+# ---------------------------------------------------------------------------
+# Lead → Partner conversion (cross-tab lifecycle bridge)
+# ---------------------------------------------------------------------------
+
+def _convert_lead_to_partner(lead_id: str) -> None:
+    """Convert a RestaurantLead into a RestaurantPartner (status='new').
+
+    Creates the partner in session state and registers it in the seed runtime
+    registry so onboarding agent tool calls can resolve it by partner_id.
+    Sets _lifecycle_banner to guide the user to the Onboarding tab.
+    """
+    lead = get_lead_by_id(lead_id)
+    if lead is None:
+        st.error(f"Lead {lead_id} not found.")
+        return
+
+    # Guard: prevent duplicate conversions
+    already_converted = {
+        p.source_lead_id
+        for p in st.session_state.get("_converted_partners", [])
+    }
+    if lead_id in already_converted:
+        st.warning(f"**{lead.name}** has already been converted to a partner.")
+        return
+
+    partner_id = f"converted_{lead_id}"
+    new_partner = RestaurantPartner(
+        partner_id=partner_id,
+        name=lead.name,
+        cuisine_type=lead.cuisine_type,
+        area=lead.area,
+        joined_date=datetime.now(),
+        monthly_orders=0,
+        avg_ticket_aed=lead.avg_ticket_aed,
+        completion_rate=100.0,
+        rating=lead.google_rating,
+        active_menu_items=0,
+        last_promo_date=None,
+        account_manager="TBD",
+        orders_trend_pct=0.0,
+        days_since_login=0,
+        support_tickets_open=0,
+        gmv_aed_last_30d=0.0,
+        status="new",
+        source_lead_id=lead_id,
+        recently_onboarded=False,
+    )
+
+    st.session_state._converted_partners.append(new_partner)
+    register_runtime_partner(new_partner)
+
+    st.session_state._lifecycle_banner = {
+        "type": "conversion",
+        "name": lead.name,
+        "partner_id": partner_id,
+        "lead_id": lead_id,
+    }
+    st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +438,15 @@ def render():
     user_id = get_current_user()
     _ensure_history_loaded(user_id)
 
+    # Cross-tab lifecycle banner — shown after a lead is converted
+    banner = st.session_state.get("_lifecycle_banner")
+    if banner and banner.get("type") == "conversion":
+        st.success(
+            f"✅ **{banner['name']}** has been converted to a new partner. "
+            "Switch to the **📋 Partner Onboarding** tab to generate their onboarding plan."
+        )
+        st.session_state._lifecycle_banner = None
+
     # Surface any Supabase errors
     supabase_err = st.session_state.get("_supabase_error")
     if supabase_err:
@@ -499,6 +569,44 @@ def render():
             ).start()
             st.session_state.setdefault("_active_task_ids", []).append(task_id)
             st.rerun()
+
+        # -------------------------------------------------------------------
+        # Mark as Converted — lifecycle bridge to Onboarding tab
+        # -------------------------------------------------------------------
+        st.markdown("---")
+        st.markdown("**✅ Mark as Converted** — move a signed lead into the onboarding queue")
+
+        conv_col1, conv_col2 = st.columns([4, 1])
+        with conv_col1:
+            conv_chosen_name = st.selectbox(
+                "Lead to convert:",
+                options=list(lead_options.keys()),
+                key="conv_lead_select",
+                label_visibility="collapsed",
+            )
+        with conv_col2:
+            conv_btn = st.button(
+                "Convert →",
+                key="conv_btn",
+                use_container_width=True,
+                type="secondary",
+            )
+
+        # Show already-converted leads as a caption
+        converted_lead_ids = {
+            p.source_lead_id
+            for p in st.session_state.get("_converted_partners", [])
+        }
+        already_converted_names = [
+            item["lead"].name
+            for item in scored_leads
+            if item["lead"].lead_id in converted_lead_ids
+        ]
+        if already_converted_names:
+            st.caption(f"Already converted: {', '.join(already_converted_names)}")
+
+        if conv_btn:
+            _convert_lead_to_partner(lead_options[conv_chosen_name])
 
         # -------------------------------------------------------------------
         # Active generation tasks + Outreach History
