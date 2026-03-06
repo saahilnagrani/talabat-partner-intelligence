@@ -77,8 +77,10 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.16 — Changelog", expanded=False):
+    with st.expander("📋 v2.17 — Changelog", expanded=False):
         st.markdown(
+            "**v2.17** — Lifecycle button visibility: *Mark as Converted* now sits **above** the leads table (visible without scrolling) · "
+            "Onboarding newest plan card always auto-expanded so *Mark as Live* is immediately visible\n\n"
             "**v2.16** — Lifecycle button visibility fixes: *Mark as Converted* moved above Quick Outreach (always visible after leads table) · "
             "*Mark as Live* button now lives inside every plan history card (persistent, not transient)\n\n"
             "**v2.15** — Cross-tab lifecycle continuity: Sales → Onboarding → Retention now linked end-to-end\n\n"

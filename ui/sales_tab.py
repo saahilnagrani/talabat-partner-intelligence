@@ -513,11 +513,8 @@ def render():
         row_height   = 38
         table_height = 46 + len(scored_leads) * row_height + 20
 
-        with st.expander(f"📊 Leads table ({len(scored_leads)} leads)", expanded=True):
-            components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
-
         # -------------------------------------------------------------------
-        # Mark as Converted — lifecycle bridge to Onboarding tab
+        # Mark as Converted — lifecycle bridge to Onboarding tab (above table)
         # -------------------------------------------------------------------
         st.markdown("---")
         st.markdown("**✅ Mark as Converted** — move a signed lead into the onboarding queue")
@@ -554,6 +551,12 @@ def render():
 
         if conv_btn:
             _convert_lead_to_partner(lead_options[conv_chosen_name])
+
+        # -------------------------------------------------------------------
+        # Leads table — collapsible
+        # -------------------------------------------------------------------
+        with st.expander(f"📊 Leads table ({len(scored_leads)} leads)", expanded=True):
+            components.html(_render_leads_table(scored_leads), height=table_height, scrolling=False)
 
         # -------------------------------------------------------------------
         # Quick Outreach — single lead

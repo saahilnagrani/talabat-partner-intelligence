@@ -427,7 +427,7 @@ def render():
 
     if not run_btn:
         st.info("Select a partner above and click **Generate Onboarding Plan** to start.")
-        _render_plan_history(user_id)
+        _render_plan_history(user_id, newest_expanded=True)
         return
 
     # -----------------------------------------------------------------------
