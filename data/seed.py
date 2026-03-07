@@ -403,6 +403,172 @@ COMPETITOR_DATA = {
 _leads_cache: list[RestaurantLead] | None = None
 _partners_cache: list[RestaurantPartner] | None = None
 
+# IDs of leads that have been converted to partners — filtered out of get_leads()
+_converted_lead_ids: set[str] = set()
+
+# ---------------------------------------------------------------------------
+# Extra leads pool — used by "Add 10 Leads" button
+# ---------------------------------------------------------------------------
+
+_EXTRA_LEADS_POOL = [
+    dict(lead_id="lead_021", name="Naan Stop", cuisine_type="Indian", area="Palm Jumeirah",
+         estimated_monthly_orders=520, avg_ticket_aed=72, google_rating=4.4, num_reviews=310,
+         has_delivery=False, current_platform=None,
+         owner_name="Vikram Nair", owner_phone="+971 50 211 3344", owner_email="vikram@naanstop.ae"),
+    dict(lead_id="lead_022", name="Seoul Bites", cuisine_type="Korean", area="Silicon Oasis",
+         estimated_monthly_orders=380, avg_ticket_aed=85, google_rating=4.6, num_reviews=195,
+         has_delivery=False, current_platform=None,
+         owner_name="Ji-Young Park", owner_phone="+971 55 322 4455", owner_email="jy@seoulbites.ae"),
+    dict(lead_id="lead_023", name="Taco Loco", cuisine_type="Mexican", area="JBR",
+         estimated_monthly_orders=610, avg_ticket_aed=68, google_rating=4.3, num_reviews=420,
+         has_delivery=True, current_platform="Deliveroo",
+         owner_name="Carlos Mendez", owner_phone="+971 50 433 5566", owner_email="carlos@tacoloco.ae"),
+    dict(lead_id="lead_024", name="Pho Saigon", cuisine_type="Vietnamese", area="Downtown Dubai",
+         estimated_monthly_orders=445, avg_ticket_aed=76, google_rating=4.5, num_reviews=280,
+         has_delivery=False, current_platform=None,
+         owner_name="Linh Nguyen", owner_phone="+971 55 544 6677", owner_email="linh@phosaigon.ae"),
+    dict(lead_id="lead_025", name="Al Reef Mandi", cuisine_type="Emirati", area="Deira",
+         estimated_monthly_orders=820, avg_ticket_aed=58, google_rating=4.7, num_reviews=710,
+         has_delivery=False, current_platform=None,
+         owner_name="Abdullah Al Reef", owner_phone="+971 50 655 7788", owner_email="info@alreefmandi.ae"),
+    dict(lead_id="lead_026", name="Thai Garden", cuisine_type="Thai", area="Al Barsha",
+         estimated_monthly_orders=390, avg_ticket_aed=80, google_rating=4.4, num_reviews=245,
+         has_delivery=False, current_platform=None,
+         owner_name="Somchai Wongsri", owner_phone="+971 55 766 8899", owner_email="somchai@thaigarden.ae"),
+    dict(lead_id="lead_027", name="Persia Palace", cuisine_type="Persian", area="Business Bay",
+         estimated_monthly_orders=470, avg_ticket_aed=95, google_rating=4.5, num_reviews=330,
+         has_delivery=True, current_platform="Noon Food",
+         owner_name="Dariush Ahmadi", owner_phone="+971 50 877 9900", owner_email="dariush@persiapalace.ae"),
+    dict(lead_id="lead_028", name="Ramen Kaito", cuisine_type="Japanese", area="Discovery Gardens",
+         estimated_monthly_orders=290, avg_ticket_aed=82, google_rating=4.6, num_reviews=175,
+         has_delivery=False, current_platform=None,
+         owner_name="Kaito Yamamoto", owner_phone="+971 55 988 0011", owner_email="kaito@ramenkaito.ae"),
+    dict(lead_id="lead_029", name="Casa Manila", cuisine_type="Filipino", area="Silicon Oasis",
+         estimated_monthly_orders=510, avg_ticket_aed=62, google_rating=4.3, num_reviews=390,
+         has_delivery=False, current_platform=None,
+         owner_name="Maria Santos", owner_phone="+971 50 099 1122", owner_email="maria@casamanila.ae"),
+    dict(lead_id="lead_030", name="Beirut By Night", cuisine_type="Lebanese", area="DIFC",
+         estimated_monthly_orders=350, avg_ticket_aed=130, google_rating=4.7, num_reviews=220,
+         has_delivery=False, current_platform=None,
+         owner_name="Nader Khalil", owner_phone="+971 55 100 2233", owner_email="nader@beirutbynight.ae"),
+    dict(lead_id="lead_031", name="Tandoori Tales", cuisine_type="Indian", area="Jumeirah",
+         estimated_monthly_orders=430, avg_ticket_aed=88, google_rating=4.4, num_reviews=305,
+         has_delivery=True, current_platform="Keeta",
+         owner_name="Priya Mehta", owner_phone="+971 50 211 3345", owner_email="priya@tandooritales.ae"),
+    dict(lead_id="lead_032", name="Dragon Palace", cuisine_type="Chinese", area="Bur Dubai",
+         estimated_monthly_orders=680, avg_ticket_aed=74, google_rating=4.2, num_reviews=480,
+         has_delivery=True, current_platform="Deliveroo",
+         owner_name="Wei Zhang", owner_phone="+971 55 322 4456", owner_email="wei@dragonpalace.ae"),
+    dict(lead_id="lead_033", name="La Cantine", cuisine_type="Italian", area="Business Bay",
+         estimated_monthly_orders=390, avg_ticket_aed=110, google_rating=4.6, num_reviews=260,
+         has_delivery=False, current_platform=None,
+         owner_name="Marco Ricci", owner_phone="+971 50 433 5567", owner_email="marco@lacantine.ae"),
+    dict(lead_id="lead_034", name="Smoke & Oak BBQ", cuisine_type="American", area="Silicon Oasis",
+         estimated_monthly_orders=470, avg_ticket_aed=92, google_rating=4.5, num_reviews=315,
+         has_delivery=False, current_platform=None,
+         owner_name="Jake Turner", owner_phone="+971 55 544 6678", owner_email="jake@smokeoak.ae"),
+    dict(lead_id="lead_035", name="Kimchi Republic", cuisine_type="Korean", area="JBR",
+         estimated_monthly_orders=320, avg_ticket_aed=78, google_rating=4.4, num_reviews=195,
+         has_delivery=False, current_platform=None,
+         owner_name="Soo-Jin Lee", owner_phone="+971 50 655 7789", owner_email="soojin@kimchirepublic.ae"),
+    dict(lead_id="lead_036", name="Empanada House", cuisine_type="Mexican", area="Al Barsha",
+         estimated_monthly_orders=350, avg_ticket_aed=65, google_rating=4.3, num_reviews=220,
+         has_delivery=False, current_platform=None,
+         owner_name="Sofia Reyes", owner_phone="+971 55 766 8890", owner_email="sofia@empanadahouse.ae"),
+    dict(lead_id="lead_037", name="Shwarma Hub", cuisine_type="Lebanese", area="Discovery Gardens",
+         estimated_monthly_orders=760, avg_ticket_aed=48, google_rating=4.6, num_reviews=580,
+         has_delivery=False, current_platform=None,
+         owner_name="Bassam Turki", owner_phone="+971 50 877 9901", owner_email="bassam@shwarmahub.ae"),
+    dict(lead_id="lead_038", name="Udon World", cuisine_type="Japanese", area="Jumeirah",
+         estimated_monthly_orders=310, avg_ticket_aed=88, google_rating=4.5, num_reviews=185,
+         has_delivery=False, current_platform=None,
+         owner_name="Hiroshi Tanaka", owner_phone="+971 55 988 0012", owner_email="hiroshi@udonworld.ae"),
+    dict(lead_id="lead_039", name="Pakwan Express", cuisine_type="Pakistani", area="Palm Jumeirah",
+         estimated_monthly_orders=290, avg_ticket_aed=72, google_rating=4.3, num_reviews=210,
+         has_delivery=True, current_platform="Careem Food",
+         owner_name="Imran Qureshi", owner_phone="+971 50 099 1123", owner_email="imran@pakwanexpress.ae"),
+    dict(lead_id="lead_040", name="Mama Africa Kitchen", cuisine_type="Emirati", area="Bur Dubai",
+         estimated_monthly_orders=410, avg_ticket_aed=60, google_rating=4.4, num_reviews=295,
+         has_delivery=False, current_platform=None,
+         owner_name="Fatima Al Marri", owner_phone="+971 55 100 2234", owner_email="fatima@mamaafrica.ae"),
+    dict(lead_id="lead_041", name="Pad Thai Corner", cuisine_type="Thai", area="DIFC",
+         estimated_monthly_orders=280, avg_ticket_aed=98, google_rating=4.5, num_reviews=165,
+         has_delivery=False, current_platform=None,
+         owner_name="Arisa Pongpat", owner_phone="+971 50 211 3346", owner_email="arisa@padthaicorner.ae"),
+    dict(lead_id="lead_042", name="Char Siu Noodles", cuisine_type="Chinese", area="Dubai Marina",
+         estimated_monthly_orders=360, avg_ticket_aed=82, google_rating=4.4, num_reviews=240,
+         has_delivery=False, current_platform=None,
+         owner_name="Tony Chan", owner_phone="+971 55 322 4457", owner_email="tony@charsiun.ae"),
+    dict(lead_id="lead_043", name="Gulshan Biryani", cuisine_type="Pakistani", area="Jumeirah",
+         estimated_monthly_orders=540, avg_ticket_aed=70, google_rating=4.6, num_reviews=445,
+         has_delivery=False, current_platform=None,
+         owner_name="Hassan Gulshan", owner_phone="+971 50 433 5568", owner_email="hassan@gulshan.ae"),
+    dict(lead_id="lead_044", name="Filipino Fiesta", cuisine_type="Filipino", area="Al Barsha",
+         estimated_monthly_orders=460, avg_ticket_aed=65, google_rating=4.3, num_reviews=330,
+         has_delivery=True, current_platform="Noon Food",
+         owner_name="Rosario Cruz", owner_phone="+971 55 544 6679", owner_email="rosario@filipinofiesta.ae"),
+    dict(lead_id="lead_045", name="Khoresh House", cuisine_type="Persian", area="Deira",
+         estimated_monthly_orders=390, avg_ticket_aed=78, google_rating=4.4, num_reviews=265,
+         has_delivery=False, current_platform=None,
+         owner_name="Reza Sadeghi", owner_phone="+971 50 655 7790", owner_email="reza@khoreshhouse.ae"),
+    dict(lead_id="lead_046", name="Little Tokyo Ramen", cuisine_type="Japanese", area="Business Bay",
+         estimated_monthly_orders=340, avg_ticket_aed=92, google_rating=4.6, num_reviews=210,
+         has_delivery=False, current_platform=None,
+         owner_name="Yuki Sato", owner_phone="+971 55 766 8891", owner_email="yuki@littletokyo.ae"),
+    dict(lead_id="lead_047", name="Masala Bay", cuisine_type="Indian", area="Silicon Oasis",
+         estimated_monthly_orders=480, avg_ticket_aed=68, google_rating=4.4, num_reviews=360,
+         has_delivery=False, current_platform=None,
+         owner_name="Rohit Sharma", owner_phone="+971 50 877 9902", owner_email="rohit@masalabay.ae"),
+    dict(lead_id="lead_048", name="Viet Pho House", cuisine_type="Vietnamese", area="Bur Dubai",
+         estimated_monthly_orders=370, avg_ticket_aed=70, google_rating=4.5, num_reviews=240,
+         has_delivery=False, current_platform=None,
+         owner_name="Tuan Pham", owner_phone="+971 55 988 0013", owner_email="tuan@vietphohouse.ae"),
+    dict(lead_id="lead_049", name="Smash & Stack", cuisine_type="American", area="Palm Jumeirah",
+         estimated_monthly_orders=560, avg_ticket_aed=105, google_rating=4.5, num_reviews=385,
+         has_delivery=True, current_platform="Deliveroo",
+         owner_name="Ryan Collins", owner_phone="+971 50 099 1124", owner_email="ryan@smashstack.ae"),
+    dict(lead_id="lead_050", name="Golden Wok", cuisine_type="Chinese", area="Downtown Dubai",
+         estimated_monthly_orders=490, avg_ticket_aed=88, google_rating=4.3, num_reviews=310,
+         has_delivery=True, current_platform="Keeta",
+         owner_name="Ling Wei", owner_phone="+971 55 100 2235", owner_email="ling@goldenwok.ae"),
+]
+
+_extra_leads_index: int = 0  # tracks which pool entry to serve next
+
+
+def mark_lead_converted(lead_id: str) -> None:
+    """Mark a lead as converted so it is excluded from get_leads() output."""
+    _converted_lead_ids.add(lead_id)
+
+
+def add_batch_leads(n: int = 10) -> int:
+    """Append the next *n* leads from the extra pool to the live leads list.
+
+    Cycles through the pool if exhausted.  Returns the count actually added
+    (may be < n if the pool is smaller than n).
+    """
+    global _extra_leads_index, _leads_cache
+    if _leads_cache is None:
+        get_leads()  # ensure cache is initialised
+
+    pool_size = len(_EXTRA_LEADS_POOL)
+    if pool_size == 0:
+        return 0
+
+    added = 0
+    for _ in range(n):
+        entry = _EXTRA_LEADS_POOL[_extra_leads_index % pool_size]
+        _extra_leads_index += 1
+        # Avoid duplicates — skip if lead_id already in cache
+        existing_ids = {l.lead_id for l in _leads_cache}
+        if entry["lead_id"] not in existing_ids:
+            _leads_cache.append(RestaurantLead(**entry))
+            added += 1
+        elif pool_size <= n:
+            break  # entire pool exhausted and all already added
+
+    return added
+
 # ---------------------------------------------------------------------------
 # Runtime registries — populated by the UI layer (no Streamlit import needed)
 # These allow agent tool calls to resolve dynamically created partners.
@@ -431,7 +597,8 @@ def get_leads() -> list[RestaurantLead]:
     global _leads_cache
     if _leads_cache is None:
         _leads_cache = [RestaurantLead(**d) for d in _LEADS_RAW]
-    return _leads_cache
+    # Filter out leads that have been converted to partners this session
+    return [l for l in _leads_cache if l.lead_id not in _converted_lead_ids]
 
 
 def get_partners() -> list[RestaurantPartner]:

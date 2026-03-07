@@ -11,10 +11,12 @@ import uuid
 from dataclasses import dataclass, field as dc_field
 from datetime import datetime, date, timedelta
 from itertools import groupby
-from data.seed import MARKET_BENCHMARKS, get_leads, get_lead_by_id, register_runtime_partner
+from data.seed import MARKET_BENCHMARKS, get_leads, get_lead_by_id, register_runtime_partner, mark_lead_converted, add_batch_leads
 from data.models import RestaurantPartner
+from data.platform_data import PLATFORM_RESTAURANTS, AREA_COORDS, get_competition_count
 from agents.sales_agent import run_sales_agent, run_sales_agent_for_lead
 from tools.sales_tools import score_lead
+import plotly.express as px
 from ui.components import (
     render_email_card,
     render_score_badge,
@@ -150,6 +152,7 @@ def _convert_lead_to_partner(lead_id: str) -> None:
         "partner_id": partner_id,
         "lead_id": lead_id,
     }
+    mark_lead_converted(lead_id)
     st.rerun()
 
 
@@ -174,11 +177,12 @@ def _render_leads_table(scored_leads: list[dict]) -> str:
             "#6c757d"
         )
         breakdown_html = (
-            f'<div class="tt-row"><span>Orders</span><span>{bd["order_volume_potential"]:.1f} / 30</span></div>'
-            f'<div class="tt-row"><span>Ticket size</span><span>{bd["ticket_size_quality"]:.1f} / 25</span></div>'
+            f'<div class="tt-row"><span>Orders</span><span>{bd["order_volume_potential"]:.1f} / 25</span></div>'
+            f'<div class="tt-row"><span>Ticket size</span><span>{bd["ticket_size_quality"]:.1f} / 20</span></div>'
             f'<div class="tt-row"><span>Brand rating</span><span>{bd["brand_quality_rating"]:.1f} / 20</span></div>'
             f'<div class="tt-row"><span>Delivery gap</span><span>{bd["delivery_gap_opportunity"]:.0f} / 15</span></div>'
             f'<div class="tt-row"><span>Platform gap</span><span>{bd["platform_exclusivity"]:.0f} / 10</span></div>'
+            f'<div class="tt-row"><span>Competition</span><span>{bd.get("competition_density", 0):.0f} / 10</span></div>'
             f'<hr class="tt-div"/>'
             f'<div class="tt-total"><span>Total</span><span>{score_val:.0f} / 100</span></div>'
         )
@@ -487,6 +491,35 @@ def render():
         already_names = [l.name for l in all_leads_top if l.lead_id in converted_lead_ids]
         if already_names:
             st.caption(f"Already converted: {', '.join(already_names)}")
+
+        # Lead summary card — shown for the selected lead
+        selected_lead = next((l for l in all_leads_top if l.name == top_chosen), None)
+        if selected_lead:
+            comp_count = get_competition_count(selected_lead.area, selected_lead.cuisine_type)
+            if comp_count == 0 and not selected_lead.has_delivery:
+                angle = f"First mover in {selected_lead.area} with zero delivery presence — high urgency pitch"
+            elif comp_count == 0:
+                angle = f"Exclusive cuisine in {selected_lead.area}, already delivery-ready — easy win"
+            elif comp_count <= 2:
+                angle = (
+                    f"Low competition in {selected_lead.area} — "
+                    "position as the premium alternative to existing players"
+                )
+            else:
+                angle = (
+                    f"High competition in {selected_lead.area} — "
+                    "lead with talabat's reach, brand visibility, and commission advantage"
+                )
+            st.info(
+                f"📍 **{selected_lead.area}** · {selected_lead.cuisine_type} · "
+                f"⭐ {selected_lead.google_rating} ({selected_lead.num_reviews:,} reviews)\n\n"
+                f"📦 Est. **{selected_lead.estimated_monthly_orders:,}** orders/mo · "
+                f"AED {selected_lead.avg_ticket_aed:.0f} avg ticket\n\n"
+                f"🏆 Competition: **{comp_count}** same-cuisine restaurant"
+                f"{'s' if comp_count != 1 else ''} already on talabat in {selected_lead.area}\n\n"
+                f"💡 **Angle:** {angle}"
+            )
+
         if top_conv_btn:
             _convert_lead_to_partner(lead_names_top[top_chosen])
     st.divider()
@@ -517,6 +550,49 @@ def render():
         cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
 
         # -------------------------------------------------------------------
+        # Dubai Coverage Map — heatmap of existing talabat restaurants
+        # -------------------------------------------------------------------
+        with st.expander("🗺️ Dubai Coverage Map", expanded=False):
+            map_rows = []
+            for area, (lat, lon) in AREA_COORDS.items():
+                count = sum(
+                    1 for r in PLATFORM_RESTAURANTS
+                    if r["area"] == area
+                    and (not selected_cuisines or r["cuisine_type"] in selected_cuisines)
+                )
+                map_rows.append({"area": area, "lat": lat, "lon": lon, "count": count})
+            map_df = pd.DataFrame(map_rows)
+            map_df = map_df[map_df["count"] > 0] if selected_cuisines else map_df
+            if map_df.empty:
+                st.caption("No platform restaurants match the selected cuisine filter.")
+            else:
+                fig = px.scatter_mapbox(
+                    map_df,
+                    lat="lat", lon="lon",
+                    size="count", color="count",
+                    hover_name="area",
+                    hover_data={"count": True, "lat": False, "lon": False},
+                    color_continuous_scale=["#1a1a2e", "#FF6000"],
+                    size_max=40,
+                    mapbox_style="open-street-map",
+                    zoom=9,
+                    center={"lat": 25.15, "lon": 55.22},
+                    height=400,
+                    labels={"count": "Restaurants on talabat"},
+                )
+                fig.update_layout(
+                    margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    coloraxis_colorbar=dict(title="Count", tickfont=dict(color="#aaa"), titlefont=dict(color="#aaa")),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                cuisine_label = ", ".join(selected_cuisines) if selected_cuisines else "all cuisines"
+                st.caption(
+                    f"Showing talabat coverage for **{cuisine_label}** across Dubai. "
+                    "Larger/darker circles = more existing restaurants on the platform in that area."
+                )
+
+        # -------------------------------------------------------------------
         # Lead count + Run Sales Agent button on the same row (#7)
         # -------------------------------------------------------------------
         all_leads = get_leads()
@@ -526,9 +602,15 @@ def render():
             and (not selected_cuisines or l.cuisine_type in selected_cuisines)
         ]
 
-        cnt_col, btn_col = st.columns([3, 1])
+        cnt_col, add_col, btn_col = st.columns([3, 1.5, 1.5])
         cnt_col.markdown(f"**{len(filtered)} lead{'s' if len(filtered) != 1 else ''} matching filters**")
+        add_btn = add_col.button("➕ Add 10 Leads", use_container_width=True, key="add_leads_btn")
         run_btn = btn_col.button("🚀 Run Sales Agent", use_container_width=True, key="run_sales")
+
+        if add_btn:
+            added = add_batch_leads(10)
+            st.success(f"Added {added} new lead{'s' if added != 1 else ''} to the pipeline.")
+            st.rerun()
 
         if not filtered:
             st.warning("No leads match the current filters.")

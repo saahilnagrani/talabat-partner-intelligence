@@ -77,8 +77,17 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.18 — Changelog", expanded=False):
+    with st.expander("📋 v2.19 — Changelog", expanded=False):
         st.markdown(
+            "**v2.19** — Bug fixes + Sales intelligence upgrades: "
+            "Converted leads now disappear from the leads database immediately · "
+            "Graduated partners no longer appear in the Onboarding dropdown · "
+            "Graduated seed partners now update the Retention monitored count · "
+            "Login cookie persists 30 days (no more logout on refresh) · "
+            "Lead scoring now includes a **competition density** factor (6th signal, max 100 pts) · "
+            "Dubai Coverage Map heatmap shows hot/cold areas — updates with cuisine filter · "
+            "➕ Add 10 Leads button populates dummy leads on demand · "
+            "Lead summary card shows area, cuisine, competition count, and pitch angle before converting\n\n"
             "**v2.18** — Lifecycle buttons now impossible to miss: *Mark as Converted* is the **first element** on the Sales tab (above filters) · "
             "*Mark as Live* partner_id lookup fixed to use Supabase explicit column as fallback (was silently empty for older plans)\n\n"
             "**v2.17** — Lifecycle button visibility: *Mark as Converted* now sits **above** the leads table (visible without scrolling) · "

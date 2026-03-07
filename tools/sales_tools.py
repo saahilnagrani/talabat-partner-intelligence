@@ -2,6 +2,7 @@
 Tool functions and schemas for the Sales Acquisition Agent.
 """
 from data.seed import get_leads, get_lead_by_id, MARKET_BENCHMARKS, COMPETITOR_DATA
+from data.platform_data import get_competition_count
 
 
 # ---------------------------------------------------------------------------
@@ -24,14 +25,25 @@ def score_lead(lead_id: str) -> dict:
     if not lead:
         return {"error": f"Lead {lead_id} not found"}
 
-    # Weighted scoring formula
-    order_score = min(lead.estimated_monthly_orders / 1000 * 30, 30)
-    ticket_score = min(lead.avg_ticket_aed / 140 * 25, 25)
-    rating_score = (lead.google_rating / 5) * 20
-    no_delivery_bonus = 15 if not lead.has_delivery else 5
-    no_platform_bonus = 10 if lead.current_platform is None else 3
+    # Weighted scoring formula (6 factors, max 100)
+    order_score   = min(lead.estimated_monthly_orders / 1000 * 25, 25)   # max 25
+    ticket_score  = min(lead.avg_ticket_aed / 140 * 20, 20)              # max 20
+    rating_score  = (lead.google_rating / 5) * 20                        # max 20
+    no_delivery_bonus = 15 if not lead.has_delivery else 5               # 15 or 5
+    no_platform_bonus = 10 if lead.current_platform is None else 3       # 10 or 3
 
-    total = order_score + ticket_score + rating_score + no_delivery_bonus + no_platform_bonus
+    # Competition density: fewer same-cuisine competitors in area = higher score
+    comp_count = get_competition_count(lead.area, lead.cuisine_type)
+    if comp_count == 0:
+        comp_score = 10
+    elif comp_count == 1:
+        comp_score = 7
+    elif comp_count == 2:
+        comp_score = 4
+    else:
+        comp_score = 1
+
+    total = order_score + ticket_score + rating_score + no_delivery_bonus + no_platform_bonus + comp_score
 
     reasoning_parts = []
     if not lead.has_delivery:
@@ -42,6 +54,8 @@ def score_lead(lead_id: str) -> dict:
         reasoning_parts.append("Not on any platform — talabat would be first-mover advantage")
     reasoning_parts.append(f"Google rating {lead.google_rating}/5 with {lead.num_reviews} reviews indicates {'strong' if lead.google_rating >= 4.5 else 'good'} brand quality")
     reasoning_parts.append(f"Estimated {lead.estimated_monthly_orders} monthly orders × AED {lead.avg_ticket_aed} ticket = AED {lead.estimated_monthly_orders * lead.avg_ticket_aed:,.0f} GMV potential")
+    comp_label = "no" if comp_count == 0 else str(comp_count)
+    reasoning_parts.append(f"{comp_label} same-cuisine competitor(s) already on talabat in {lead.area}")
 
     return {
         "lead_id": lead_id,
@@ -53,6 +67,7 @@ def score_lead(lead_id: str) -> dict:
             "brand_quality_rating": round(rating_score, 1),
             "delivery_gap_opportunity": round(no_delivery_bonus, 1),
             "platform_exclusivity": round(no_platform_bonus, 1),
+            "competition_density": round(comp_score, 1),
         },
         "estimated_monthly_gmv_aed": lead.estimated_monthly_orders * lead.avg_ticket_aed,
         "reasoning": " | ".join(reasoning_parts),

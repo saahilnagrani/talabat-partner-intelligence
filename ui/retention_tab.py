@@ -13,14 +13,17 @@ from ui.components import (
 
 
 def _get_all_active_partners():
-    """Return the full list of active partners — seed + graduated converted partners."""
+    """Return the full list of active partners — seed + graduated converted partners + graduated seed new partners."""
     seed_active = [p for p in get_partners() if p.status != "new"]
     graduated_ids = st.session_state.get("_graduated_partner_ids", set())
-    graduated = [
+    graduated_converted = [
         p for p in st.session_state.get("_converted_partners", [])
         if p.partner_id in graduated_ids
     ]
-    return seed_active + graduated, graduated_ids
+    graduated_seed = [
+        p for p in get_partners() if p.status == "new" and p.partner_id in graduated_ids
+    ]
+    return seed_active + graduated_converted + graduated_seed, graduated_ids
 
 
 def _get_partner_summary_df():

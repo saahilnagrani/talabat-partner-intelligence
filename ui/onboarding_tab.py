@@ -398,8 +398,9 @@ def render():
     )
 
     # Partner selector — merge static seed new partners with dynamically converted leads
-    seed_new_partners = [p for p in get_partners() if p.status == "new"]
-    converted_partners = st.session_state.get("_converted_partners", [])
+    graduated_ids = st.session_state.get("_graduated_partner_ids", set())
+    seed_new_partners = [p for p in get_partners() if p.status == "new" and p.partner_id not in graduated_ids]
+    converted_partners = [p for p in st.session_state.get("_converted_partners", []) if p.partner_id not in graduated_ids]
     new_partners = seed_new_partners + converted_partners  # IDs never collide
 
     if not new_partners:

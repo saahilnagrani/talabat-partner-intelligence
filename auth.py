@@ -91,7 +91,7 @@ def show_login_form() -> None:
             st.session_state.logged_in_user = username
             # Persist across page refreshes
             try:
-                _cookie_controller().set(_COOKIE_KEY, username)
+                _cookie_controller().set(_COOKIE_KEY, username, max_age=86400 * 30)
             except Exception:
                 pass
             # Clear any stale cache from a previous user
