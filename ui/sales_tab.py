@@ -566,7 +566,7 @@ def render():
             if map_df.empty:
                 st.caption("No platform restaurants match the selected cuisine filter.")
             else:
-                fig = px.scatter_mapbox(
+                fig = px.scatter_map(
                     map_df,
                     lat="lat", lon="lon",
                     size="count", color="count",
@@ -574,7 +574,7 @@ def render():
                     hover_data={"count": True, "lat": False, "lon": False},
                     color_continuous_scale=["#1a1a2e", "#FF6000"],
                     size_max=40,
-                    mapbox_style="open-street-map",
+                    map_style="open-street-map",
                     zoom=9,
                     center={"lat": 25.15, "lon": 55.22},
                     height=400,
@@ -583,7 +583,6 @@ def render():
                 fig.update_layout(
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
                     paper_bgcolor="rgba(0,0,0,0)",
-                    coloraxis_colorbar=dict(title="Count", tickfont=dict(color="#aaa"), titlefont=dict(color="#aaa")),
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 cuisine_label = ", ".join(selected_cuisines) if selected_cuisines else "all cuisines"
