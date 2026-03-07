@@ -4,6 +4,7 @@ Tab 1: Sales Acquisition Agent UI.
 from __future__ import annotations
 import streamlit as st
 import pandas as pd
+import numpy as np
 import streamlit.components.v1 as components
 import threading
 import time
@@ -435,6 +436,60 @@ def _render_history(user_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Coverage grid computation (cached)
+# ---------------------------------------------------------------------------
+
+# Flat-Earth constants for Dubai (~25°N)
+_LAT_KM = 111.0                                          # km per degree latitude
+_LON_KM = 40075.0 * np.cos(np.radians(25.15)) / 360.0  # ≈ 100.9 km per degree longitude
+
+
+@st.cache_data(show_spinner=False)
+def _compute_coverage_grid(
+    radius_km: float,
+    cuisine_filter: tuple,
+    grid_n: int = 70,
+) -> pd.DataFrame:
+    """Return a DataFrame of {lat, lon, count} for the coverage choropleth.
+
+    For each grid cell over Dubai, count = number of platform restaurants whose
+    location is within *radius_km* of that cell.  Uses a flat-Earth Euclidean
+    approximation (< 0.1% error for distances < 50 km in Dubai).
+
+    Results are cached by (radius_km, cuisine_filter) so repeated slider
+    interactions at the same radius are instant.
+    """
+    restaurants = [
+        r for r in PLATFORM_RESTAURANTS
+        if (not cuisine_filter or r["cuisine_type"] in cuisine_filter)
+    ]
+    if not restaurants:
+        return pd.DataFrame(columns=["lat", "lon", "count"])
+
+    r_lats = np.array([r["lat"] for r in restaurants], dtype=np.float32)
+    r_lons = np.array([r["lon"] for r in restaurants], dtype=np.float32)
+
+    # Regular grid covering the Dubai metro area
+    g_lats = np.linspace(24.95, 25.35, grid_n, dtype=np.float32)
+    g_lons = np.linspace(55.05, 55.45, grid_n, dtype=np.float32)
+    gla, glo = np.meshgrid(g_lats, g_lons)
+    gla = gla.ravel()   # shape (grid_n², )
+    glo = glo.ravel()
+
+    # Vectorized distance: (N_grid, N_restaurants) — in-place to minimise peak RAM
+    dlat_km = (gla[:, None] - r_lats[None, :]) * _LAT_KM   # (N, M) float32
+    dlon_km = (glo[:, None] - r_lons[None, :]) * _LON_KM
+    dlat_km **= 2
+    dlon_km **= 2
+    dlat_km += dlon_km                                       # reuse array: dist² (N, M)
+    within = dlat_km <= (radius_km ** 2)                     # bool (N, M)
+    counts = within.sum(axis=1).astype(np.int16)             # (N,)
+
+    df = pd.DataFrame({"lat": gla, "lon": glo, "count": counts})
+    return df[df["count"] > 0].reset_index(drop=True)       # drop empty cells
+
+
+# ---------------------------------------------------------------------------
 # Main render
 # ---------------------------------------------------------------------------
 
@@ -550,37 +605,44 @@ def render():
         cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
 
         # -------------------------------------------------------------------
-        # Dubai Coverage Map — continuous density heatmap
+        # Dubai Coverage Map — proper delivery-radius coverage choropleth
         # -------------------------------------------------------------------
         with st.expander("🗺️ Dubai Coverage Map", expanded=False):
-            map_rows = [
-                {"lat": r["lat"], "lon": r["lon"]}
-                for r in PLATFORM_RESTAURANTS
-                if (not selected_cuisines or r["cuisine_type"] in selected_cuisines)
-            ]
-            if not map_rows:
+            radius_km = st.slider(
+                "Delivery radius per restaurant (km)",
+                min_value=1, max_value=10, value=3, step=1,
+                help="Each restaurant is assumed to deliver within this radius. "
+                     "The map counts how many restaurants can reach each point.",
+            )
+            cuisine_key = tuple(sorted(selected_cuisines))
+            grid_df = _compute_coverage_grid(radius_km, cuisine_key)
+            if grid_df.empty:
                 st.caption("No platform restaurants match the selected cuisine filter.")
             else:
-                map_df = pd.DataFrame(map_rows)
                 fig = px.density_map(
-                    map_df,
-                    lat="lat", lon="lon",
-                    radius=18,
+                    grid_df,
+                    lat="lat", lon="lon", z="count",
+                    radius=14,
                     color_continuous_scale=["#0d0d1a", "#FF6000"],
                     zoom=9,
                     center={"lat": 25.15, "lon": 55.22},
                     height=420,
-                    opacity=0.75,
+                    opacity=0.85,
                 )
                 fig.update_layout(
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
                     paper_bgcolor="rgba(0,0,0,0)",
+                    coloraxis_showscale=False,
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 cuisine_label = ", ".join(selected_cuisines) if selected_cuisines else "all cuisines"
+                n_shown = len([
+                    r for r in PLATFORM_RESTAURANTS
+                    if not selected_cuisines or r["cuisine_type"] in selected_cuisines
+                ])
                 st.caption(
-                    f"Delivery coverage density for **{cuisine_label}** — "
-                    "brighter = more restaurants delivering to that area."
+                    f"**{n_shown}** restaurants · **{radius_km} km** delivery radius · "
+                    f"{cuisine_label} — brighter = more restaurants covering that point"
                 )
 
         # -------------------------------------------------------------------

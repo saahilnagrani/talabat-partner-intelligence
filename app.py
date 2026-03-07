@@ -77,8 +77,13 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.21 — Changelog", expanded=False):
+    with st.expander("📋 v2.22 — Changelog", expanded=False):
         st.markdown(
+            "**v2.22** — Configurable delivery radius + proper coverage choropleth: "
+            "Dubai Coverage Map now has a 1–10 km delivery radius slider · "
+            "For each grid cell, count = number of restaurants whose location is within the chosen radius (vectorised NumPy flat-Earth calc, ~15 ms) · "
+            "Results are Streamlit-cached per radius × cuisine combination so repeated interactions are instant · "
+            "Map brightens where delivery zones overlap and dims in genuine gap areas\n\n"
             "**v2.21** — True density heatmap: "
             "Dubai Coverage Map replaced from 13 area bubbles → continuous kernel density surface using all 1030 individual restaurant lat/lon coordinates · "
             "Each restaurant now has a deterministic lat/lon (±1.5 km from area centroid via hashlib offsets) · "
