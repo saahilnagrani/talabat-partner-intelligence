@@ -623,7 +623,7 @@ def render():
                     grid_df,
                     lat="lat", lon="lon", z="count",
                     radius=14,
-                    color_continuous_scale=["#0d0d1a", "#FF6000"],
+                    color_continuous_scale="RdYlGn",
                     zoom=9,
                     center={"lat": 25.15, "lon": 55.22},
                     height=420,
