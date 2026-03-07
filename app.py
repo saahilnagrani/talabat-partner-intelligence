@@ -77,8 +77,12 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.20 — Changelog", expanded=False):
+    with st.expander("📋 v2.21 — Changelog", expanded=False):
         st.markdown(
+            "**v2.21** — True density heatmap: "
+            "Dubai Coverage Map replaced from 13 area bubbles → continuous kernel density surface using all 1030 individual restaurant lat/lon coordinates · "
+            "Each restaurant now has a deterministic lat/lon (±1.5 km from area centroid via hashlib offsets) · "
+            "Map colours every point by local restaurant density — brighter orange = more coverage, darker = delivery gap\n\n"
             "**v2.20** — 1000+ restaurant database: "
             "Platform restaurant data expanded from 44 → 1030 entries across 13 Dubai areas and 14 cuisines (generated deterministically) · "
             "All 1030 restaurants are now visible in the Retention tab as active partners with full health scores, GMV, orders trend and risk classification · "

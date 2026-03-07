@@ -550,35 +550,27 @@ def render():
         cuisine_filter = ", ".join(selected_cuisines) if selected_cuisines else "all"
 
         # -------------------------------------------------------------------
-        # Dubai Coverage Map — heatmap of existing talabat restaurants
+        # Dubai Coverage Map — continuous density heatmap
         # -------------------------------------------------------------------
         with st.expander("🗺️ Dubai Coverage Map", expanded=False):
-            map_rows = []
-            for area, (lat, lon) in AREA_COORDS.items():
-                count = sum(
-                    1 for r in PLATFORM_RESTAURANTS
-                    if r["area"] == area
-                    and (not selected_cuisines or r["cuisine_type"] in selected_cuisines)
-                )
-                map_rows.append({"area": area, "lat": lat, "lon": lon, "count": count})
-            map_df = pd.DataFrame(map_rows)
-            map_df = map_df[map_df["count"] > 0] if selected_cuisines else map_df
-            if map_df.empty:
+            map_rows = [
+                {"lat": r["lat"], "lon": r["lon"]}
+                for r in PLATFORM_RESTAURANTS
+                if (not selected_cuisines or r["cuisine_type"] in selected_cuisines)
+            ]
+            if not map_rows:
                 st.caption("No platform restaurants match the selected cuisine filter.")
             else:
-                fig = px.scatter_map(
+                map_df = pd.DataFrame(map_rows)
+                fig = px.density_map(
                     map_df,
                     lat="lat", lon="lon",
-                    size="count", color="count",
-                    hover_name="area",
-                    hover_data={"count": True, "lat": False, "lon": False},
-                    color_continuous_scale=["#1a1a2e", "#FF6000"],
-                    size_max=40,
-                    map_style="open-street-map",
+                    radius=18,
+                    color_continuous_scale=["#0d0d1a", "#FF6000"],
                     zoom=9,
                     center={"lat": 25.15, "lon": 55.22},
-                    height=400,
-                    labels={"count": "Restaurants on talabat"},
+                    height=420,
+                    opacity=0.75,
                 )
                 fig.update_layout(
                     margin={"r": 0, "t": 0, "l": 0, "b": 0},
@@ -587,8 +579,8 @@ def render():
                 st.plotly_chart(fig, use_container_width=True)
                 cuisine_label = ", ".join(selected_cuisines) if selected_cuisines else "all cuisines"
                 st.caption(
-                    f"Showing talabat coverage for **{cuisine_label}** across Dubai. "
-                    "Larger/darker circles = more existing restaurants on the platform in that area."
+                    f"Delivery coverage density for **{cuisine_label}** — "
+                    "brighter = more restaurants delivering to that area."
                 )
 
         # -------------------------------------------------------------------

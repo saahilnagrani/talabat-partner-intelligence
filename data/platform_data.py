@@ -150,13 +150,14 @@ _AREA_CUISINE_WEIGHTS: dict[str, dict[str, int]] = {
 # ---------------------------------------------------------------------------
 
 def _build_platform_restaurants() -> list[dict]:
-    """Generate ~1030 restaurant entries deterministically."""
+    """Generate ~1030 restaurant entries deterministically, each with a lat/lon."""
     import random as _r
     rng = _r.Random(42)
     entries: list[dict] = []
     seen_names: set[str] = set()
 
     for area, target in _AREA_TARGET_COUNTS.items():
+        lat_c, lon_c = AREA_COORDS[area]   # area centroid
         weights_map = _AREA_CUISINE_WEIGHTS.get(area, {})
         cuisine_pool = [c for c, w in weights_map.items() for _ in range(w)]
         for i in range(target):
@@ -169,7 +170,19 @@ def _build_platform_restaurants() -> list[dict]:
             if name in seen_names:
                 name = f"{name} {i + 1}"
             seen_names.add(name)
-            entries.append({"name": name, "cuisine_type": cuisine, "area": area})
+
+            # Spread each restaurant within ±1.5 km of its area centroid.
+            # 1° lat ≈ 111 km  →  ±0.0135°   (using ±0.027° total range)
+            # 1° lon ≈  98 km  →  ±0.0153°   (using ±0.031° total range at Dubai lat)
+            h_lat = int(hashlib.md5(f"{name}_lat".encode()).hexdigest()[:4], 16)  # 0–65535
+            h_lon = int(hashlib.md5(f"{name}_lon".encode()).hexdigest()[:4], 16)
+            lat   = round(lat_c + (h_lat / 65535 - 0.5) * 0.027, 5)
+            lon   = round(lon_c + (h_lon / 65535 - 0.5) * 0.031, 5)
+
+            entries.append({
+                "name": name, "cuisine_type": cuisine, "area": area,
+                "lat": lat, "lon": lon,
+            })
 
     return entries
 
