@@ -5,6 +5,7 @@ All data is simulated for demo purposes.
 from __future__ import annotations
 from datetime import datetime, timedelta
 from data.models import RestaurantLead, RestaurantPartner
+from data.platform_data import get_competition_count, get_platform_partners  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # LEADS — 20 prospective restaurants not yet on talabat
@@ -605,6 +606,7 @@ def get_partners() -> list[RestaurantPartner]:
     global _partners_cache
     if _partners_cache is None:
         _partners_cache = [RestaurantPartner(**d) for d in _PARTNERS_RAW]
+        _partners_cache += get_platform_partners()   # 1000+ generated partners
     return _partners_cache
 
 

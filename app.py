@@ -77,8 +77,13 @@ with st.sidebar:
 
     # 7. Version + Changelog
     st.divider()
-    with st.expander("📋 v2.19 — Changelog", expanded=False):
+    with st.expander("📋 v2.20 — Changelog", expanded=False):
         st.markdown(
+            "**v2.20** — 1000+ restaurant database: "
+            "Platform restaurant data expanded from 44 → 1030 entries across 13 Dubai areas and 14 cuisines (generated deterministically) · "
+            "All 1030 restaurants are now visible in the Retention tab as active partners with full health scores, GMV, orders trend and risk classification · "
+            "Jumeirah Lake Towers added to Dubai Coverage Map · "
+            "Competition density scoring now reflects realistic platform density (e.g. 37 Indian restaurants in Deira)\n\n"
             "**v2.19** — Bug fixes + Sales intelligence upgrades: "
             "Converted leads now disappear from the leads database immediately · "
             "Graduated partners no longer appear in the Onboarding dropdown · "
